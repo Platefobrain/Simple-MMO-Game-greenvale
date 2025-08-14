@@ -24,7 +24,17 @@ object LevelManager {
         return 100 * level
     }
 
-    fun addExperience(player: PlayerData, amount: Int): Boolean {
+    data class LevelUpResult(
+        val leveledUp: Boolean,
+        val newLevel: Int,
+        val newMaxHealth: Int,
+        val newCurrentHealth: Int,
+        val remainingXP: Int,
+        val newPrimaryStat: Int = 0,
+        val newStamina: Int = 0
+    )
+
+    fun addExperience(player: PlayerData, amount: Int): LevelUpResult {
         player.experience += amount
         var leveledUp = false
 
@@ -33,11 +43,22 @@ object LevelManager {
             player.level++
             leveledUp = true
 
-            // np. zwiększamy zdrowie przy awansie
-            player.maxHealth += 10
+            // Zwiększ staty
+            player.increasePrimaryStat(2) // tu jest ile dmg dodaje na ilosc punktow
+
+            // Zdrowie zależne od staminy
+            player.maxHealth = player.calculateMaxHealth()
             player.currentHealth = player.maxHealth
         }
 
-        return leveledUp
+        return LevelUpResult(
+            leveledUp = leveledUp,
+            newLevel = player.level,
+            newMaxHealth = player.maxHealth,
+            newCurrentHealth = player.currentHealth,
+            remainingXP = player.experience,
+            newPrimaryStat = player.getPrimaryStat(),
+            newStamina = player.stamina
+        )
     }
 }

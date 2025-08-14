@@ -21,9 +21,9 @@ object EnemyLevelManager {
 
     // Bazowe statystyki dla różnych typów przeciwników (poziom 1)
     private val baseStats = mapOf(
-        "Sheep" to EnemyBaseStats(health = 20, experienceReward = 10),
-        "Wolf" to EnemyBaseStats(health = 40, experienceReward = 25),
-        "Bear" to EnemyBaseStats(health = 80, experienceReward = 1000)
+        "Sheep" to EnemyBaseStats(health = 42, experienceReward = 50),
+        "Wolf" to EnemyBaseStats(health = 46, experienceReward = 55),
+        "Bear" to EnemyBaseStats(health = 51, experienceReward = 60)
     )
 
     // Oblicza zdrowie przeciwnika na podstawie poziomu

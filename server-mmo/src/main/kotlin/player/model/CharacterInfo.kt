@@ -18,15 +18,28 @@
 package pl.decodesoft.player.model
 
 import kotlinx.serialization.Serializable
+import pl.decodesoft.items.model.EquippedItems
 
-// Informacje o postaci
+// Informacje o postaci zapisywane do bazy danych
 @Serializable
 data class CharacterInfo(
-    val id: String,             // Unikalny identyfikator postaci
-    val nickname: String,       // Nazwa postaci
-    val characterClass: Int,    // Klasa postaci (0-łucznik, 1-mag, 2-wojownik)
-    var maxHealth: Int = 100,   // Maksymalne zdrowie
-    var currentHealth: Int = 100, // Aktualne zdrowie
+    val id: String,
+    val nickname: String,
+    val characterClass: Int,
+    var maxHealth: Int = 100,       // stamina
+    var currentHealth: Int = 100,   // stamina
+    var maxMana: Int = 100,           // mana
+    var currentMana: Int = 100,       // mana
     var level: Int = 1,
-    var experience: Int = 0
+    var experience: Int = 0,
+    var lastX: Float = 500f,        // Ostatnia pozycja X
+    var lastY: Float = 600f,        // Ostatnia pozycja Y
+    var spellPower: Int = 0,
+    var strength: Int = 0,
+    var agility: Int = 0,
+    var stamina: Int = 0,
+    var mana: Int = 0,
+    var equippedItems: EquippedItems = EquippedItems(), // itemy
+    var inventory: MutableMap<Int, String> = mutableMapOf(),
+    var hasReceivedStarterItems: Boolean = false
 )

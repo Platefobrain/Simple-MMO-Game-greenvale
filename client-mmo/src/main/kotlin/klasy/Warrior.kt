@@ -23,29 +23,26 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import pl.decodesoft.klasy.projectiles.Sword
 import pl.decodesoft.klasy.skile.SkileManager
+import pl.decodesoft.network.MessageManager
 import pl.decodesoft.player.Player
 
-
-/**
- * Klasa reprezentująca Wojownika
- */
+// Klasa reprezentująca Wojownika
 class Warrior(
     player: Player,
     networkScope: CoroutineScope,
     session: () -> DefaultWebSocketSession?,
-    skileManager: SkileManager
-) : CharacterClass(player, networkScope, session, skileManager) {
+    skileManager: SkileManager,
+    messageManager: MessageManager // DODANE: messageManager
+) : CharacterClass(player, networkScope, session, skileManager, messageManager) { // DODANE: messageManager
 
     // Nadpisane właściwości z klasy bazowej
-    override val attackCooldown = 3f
+    override val attackCooldown = 2f
     override var attackTimer = 0f
     override val attackRange = 45f
     override val attackName = "Atak mieczem"
     override val attackColor: Color = Color.ORANGE
 
-    /**
-     * Wykonuje atak mieczem w kierunku celu
-     */
+    // Wykonuje atak mieczem w kierunku celu
     override fun performAttack(targetX: Float, targetY: Float, targetId: String) {
         // Oblicz kierunek ataku
         val dirX = targetX - player.x
@@ -63,7 +60,9 @@ class Warrior(
             normalizedDirX,
             normalizedDirY,
             player.id,
-            targetId
+            targetId,
+            targetX,
+            targetY
         )
 
         // Dodaj atak do menedżera umiejętności

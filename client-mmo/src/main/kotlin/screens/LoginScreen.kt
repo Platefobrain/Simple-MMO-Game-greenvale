@@ -18,6 +18,7 @@
 package pl.decodesoft.screens
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
@@ -44,7 +45,10 @@ import kotlinx.serialization.json.Json
 import kotlin.math.abs
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
+import com.badlogic.gdx.scenes.scene2d.InputEvent
+import com.badlogic.gdx.scenes.scene2d.InputListener
 import pl.decodesoft.MMOGame
+import pl.decodesoft.Strings.IP_ADDRESS
 
 // Model danych dla logowania/rejestracji
 @Serializable
@@ -73,11 +77,18 @@ class LoginScreen(private val game: MMOGame) : Screen {
     private var errorMessage: String? = null
     private var isLoading = false
 
+    private lateinit var usernameField: TextField
+    private lateinit var passwordField: TextField
+    private lateinit var rememberMeCheckBox: CheckBox
+    private lateinit var statusLabel: Label
+
+    private val prefs = Gdx.app.getPreferences("GreenValePreferences")
+
     override fun show() {
         camera = OrthographicCamera()
         viewport = FitViewport(Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat(), camera)
         batch = SpriteBatch()
-        val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/OpenSans-Regular.ttf"))
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/ChakraPetch-SemiBold.ttf"))
         val parameter = FreeTypeFontParameter().apply {
             size = 24
             characters = FreeTypeFontGenerator.DEFAULT_CHARS + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
@@ -90,15 +101,20 @@ class LoginScreen(private val game: MMOGame) : Screen {
         stage = Stage(viewport, batch)
         Gdx.input.inputProcessor = stage
 
-        // Tworzymy prosty skin na potrzeby interfejsu
         skin = runCatching {
             Skin(Gdx.files.internal("assets/uiskin.json"))
         }.getOrElse {
-            // Obsługa błędu (można dodać logowanie)
             createBasicSkin()
         }
 
         createUI()
+
+        // Wczytanie zapisanego loginu i ustawienie checkboxa
+        val savedLogin = prefs.getString("savedLogin", "")
+        if (savedLogin.isNotBlank()) {
+            usernameField.text = savedLogin
+            rememberMeCheckBox.isChecked = true
+        }
     }
 
     private fun createBasicSkin(): Skin {
@@ -125,35 +141,60 @@ class LoginScreen(private val game: MMOGame) : Screen {
         val table = Table()
         table.setFillParent(true)
 
-        val titleLabel = Label("Łapsze Niżne MMORPG", skin)
+        val titleLabel = Label("GreenVale !", skin)
         titleLabel.setFontScale(2f)
 
         val usernameLabel = Label("Login:", skin)
-        val usernameField = TextField("", skin)
+        usernameField = TextField("", skin)
 
         val passwordLabel = Label("Hasło:", skin)
-        val passwordField = TextField("", skin)
+        passwordField = TextField("", skin)
         passwordField.isPasswordMode = true
+
+        rememberMeCheckBox = CheckBox("", skin) // checkbox bez tekstu
+        val rememberLabel = Label("Zapamiętaj login", skin)
+
+        val rememberGroup = HorizontalGroup()
+        rememberGroup.space(10f) // odstęp między checkboxem a labelką
+        rememberGroup.addActor(rememberMeCheckBox)
+        rememberGroup.addActor(rememberLabel)
 
         val loginButton = TextButton("Zaloguj się", skin)
         val registerButton = TextButton("Zarejestruj się", skin)
 
-        val statusLabel = Label("", skin)
+        statusLabel = Label("", skin)
         statusLabel.setAlignment(Align.center)
+
+        val enterListener = object : InputListener() {
+            override fun keyDown(event: InputEvent?, keycode: Int): Boolean {
+                if (keycode == Input.Keys.ENTER || keycode == Input.Keys.NUMPAD_ENTER) {
+                    loginButton.toggle()  // jeśli jest toggle, albo inaczej:
+                    loginButton.fire(ChangeListener.ChangeEvent()) // wywołaj zdarzenie zmiany (kliknięcie)
+                    return true
+                }
+                return false
+            }
+        }
+
+        usernameField.addListener(enterListener)
+        passwordField.addListener(enterListener)
 
         // Układ interfejsu
         table.add(titleLabel).colspan(2).pad(20f)
         table.row()
-        table.add(usernameLabel).padRight(10f)
-        table.add(usernameField).width(200f)
+        table.add(usernameLabel).padBottom(3f)
+        table.add(usernameField).width(200f).pad(5f)
         table.row()
-        table.add(passwordLabel).padRight(10f)
+        table.add(passwordLabel).padBottom(3f)
         table.add(passwordField).width(200f)
-        table.row().pad(10f)
-        table.add(loginButton).padRight(10f)
-        table.add(registerButton)
         table.row()
-        table.add(statusLabel).colspan(2).pad(20f)
+        table.add(rememberGroup).colspan(2).padTop(10f)
+        table.row().pad(5f)
+        table.add(loginButton).colspan(2).width(130f).padTop(50f)
+        table.row()
+        table.add(registerButton).colspan(2).width(130f)
+        table.row()
+        table.add(statusLabel).width(100f).colspan(2).pad(20f)
 
         // Obsługa przycisków
         loginButton.addListener(object : ChangeListener() {
@@ -166,6 +207,13 @@ class LoginScreen(private val game: MMOGame) : Screen {
                     statusLabel.color = Color.RED
                     return
                 }
+
+                if (rememberMeCheckBox.isChecked) {
+                    prefs.putString("savedLogin", username)
+                } else {
+                    prefs.remove("savedLogin")
+                }
+                prefs.flush()
 
                 loginUser(username, password, statusLabel)
             }
@@ -187,6 +235,32 @@ class LoginScreen(private val game: MMOGame) : Screen {
         })
 
         stage.addActor(table)
+
+        // Przyciski w prawym dolnym rogu
+        val bottomRightTable = Table()
+        bottomRightTable.bottom().right()
+        bottomRightTable.setFillParent(true)
+
+        val optionsButton = TextButton("Opcje", skin)
+        val exitButton = TextButton("Exit Game", skin)
+
+        bottomRightTable.add(optionsButton).width(150f).pad(0f, 0f, 5f, 30f).row()
+        bottomRightTable.add(exitButton).width(150f).pad(0f, 0f, 30f, 30f).row()
+
+        optionsButton.addListener(object : ChangeListener() {
+            override fun changed(event: ChangeEvent?, actor: Actor?) {
+                println("Opcje kliknięte")
+                // Tu możesz dodać ekran opcji
+            }
+        })
+
+        exitButton.addListener(object : ChangeListener() {
+            override fun changed(event: ChangeEvent?, actor: Actor?) {
+                Gdx.app.exit()
+            }
+        })
+
+        stage.addActor(bottomRightTable)
     }
 
     // W klasie LoginScreen w metodzie loginUser, zmień:
@@ -197,7 +271,7 @@ class LoginScreen(private val game: MMOGame) : Screen {
 
         loginScope.launch {
             try {
-                val response = httpClient.post("http://localhost:8081/auth/login") {
+                val response = httpClient.post("http://$IP_ADDRESS/auth/login") {
                     contentType(ContentType.Application.Json)
                     setBody(AuthRequest(username, password))
                 }
@@ -244,7 +318,7 @@ class LoginScreen(private val game: MMOGame) : Screen {
 
         loginScope.launch {
             try {
-                val response = httpClient.post("http://localhost:8081/auth/register") {
+                val response = httpClient.post("http://$IP_ADDRESS/auth/register") {
                     contentType(ContentType.Application.Json)
                     setBody(AuthRequest(username, password))
                 }

@@ -19,111 +19,95 @@ package pl.decodesoft.screens
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.GL20
-import com.badlogic.gdx.graphics.g2d.BitmapFont
-import com.badlogic.gdx.graphics.g2d.GlyphLayout
-import com.badlogic.gdx.graphics.g2d.SpriteBatch
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer
+import com.badlogic.gdx.graphics.Pixmap
+import com.badlogic.gdx.graphics.Texture
+import com.badlogic.gdx.graphics.g2d.TextureRegion
+import com.badlogic.gdx.scenes.scene2d.Actor
+import com.badlogic.gdx.scenes.scene2d.Stage
+import com.badlogic.gdx.scenes.scene2d.ui.Label
+import com.badlogic.gdx.scenes.scene2d.ui.Table
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
+import com.badlogic.gdx.utils.viewport.ScreenViewport
 import pl.decodesoft.MMOGame
+import pl.decodesoft.ui.UISkin
 
 class DeathScreen(private val game: MMOGame) {
-    private var batch = SpriteBatch()
-    private var shapeRenderer = ShapeRenderer()
-    private var font: BitmapFont
-    private var glyphLayout = GlyphLayout()
-
-    private val buttonWidth = 200f
-    private val buttonHeight = 60f
-    private var buttonX = 0f
-    private var buttonY = 0f
+    val stagePublic get() = stage
+    private var visible = false
+    private var stage: Stage = Stage(ScreenViewport())
+    private val mainTable: Table = Table()
+    private val contentTable: Table = Table()
 
     init {
-        font = BitmapFont().apply {
-            data.setScale(2f)
-            color = Color.WHITE
-        }
+        setupStage()
+    }
 
-        resize(Gdx.graphics.width, Gdx.graphics.height)
+    private fun setupStage() {
+        mainTable.setFillParent(true)
+        mainTable.center()
+        mainTable.isVisible = false
+
+        mainTable.background = createTransparentBackground()
+
+        // Label z tekstem "Zginąłeś!" na czerwono i powiększony
+        val deathLabel = Label("Zginąłeś!", UISkin.skin)
+        deathLabel.color = Color.RED
+        deathLabel.setFontScale(2f)
+        contentTable.add(deathLabel).pad(20f).row()
+
+        // Przycisk Respawn z ChangeListener
+        val buttonWidth = 300f
+        val buttonHeight = 60f
+        val padding = 5f
+
+        val respawnButton = TextButton("Respawn", UISkin.skin)
+        respawnButton.addListener(object : ChangeListener() {
+            override fun changed(event: ChangeEvent?, actor: Actor?) {
+                game.respawnPlayer()
+                hide()
+            }
+        })
+        contentTable.add(respawnButton).width(buttonWidth).height(buttonHeight).pad(padding).row()
+
+        mainTable.add(contentTable).pad(40f)
+        stage.addActor(mainTable)
+    }
+
+    private fun createTransparentBackground(): Drawable {
+        val pixmap = Pixmap(1, 1, Pixmap.Format.RGBA8888)
+        pixmap.setColor(0f, 0f, 0f, 0.6f)
+        pixmap.fill()
+        val texture = Texture(pixmap)
+        pixmap.dispose()
+        return TextureRegionDrawable(TextureRegion(texture))
     }
 
     fun show() {
-        // Wczytaj czcionkę
-        val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/OpenSans-Regular.ttf"))
-        val parameter = FreeTypeFontParameter().apply {
-            size = 24
-            characters = FreeTypeFontGenerator.DEFAULT_CHARS + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
-            color = Color.WHITE
-        }
-        font = generator.generateFont(parameter)
-        generator.dispose()
+        visible = true
+        mainTable.isVisible = true
+        Gdx.input.inputProcessor = stage
     }
 
-    fun render() {
+    private fun hide() {
+        visible = false
+        mainTable.isVisible = false
+        Gdx.input.inputProcessor = null
+    }
 
-        // Czyszczenie ekranu
-        Gdx.gl.glClearColor(0.1f, 0.0f, 0.0f, 1f) // Ciemny czerwony tło
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-
-        // Rysowanie informacji o śmierci
-        batch.begin()
-
-        val deathText = "Zginąłeś!"
-        glyphLayout.setText(font, deathText)
-        font.color = Color.RED
-        font.draw(batch, deathText,
-            (Gdx.graphics.width - glyphLayout.width) / 2,
-            Gdx.graphics.height * 0.7f)
-
-        batch.end()
-
-        // Rysowanie przycisku respawn
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-
-        // Sprawdź, czy przycisk jest wciśnięty
-        val mouseX = Gdx.input.x.toFloat()
-        val mouseY = Gdx.graphics.height - Gdx.input.y.toFloat() // Odwrócona oś Y
-
-        val isButtonHovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
-                mouseY >= buttonY && mouseY <= buttonY + buttonHeight
-
-        shapeRenderer.color = if (isButtonHovered) Color.LIME else Color.FOREST
-        shapeRenderer.rect(buttonX, buttonY, buttonWidth, buttonHeight)
-        shapeRenderer.end()
-
-        // Rysowanie obramowania przycisku
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line)
-        shapeRenderer.color = Color.WHITE
-        shapeRenderer.rect(buttonX, buttonY, buttonWidth, buttonHeight)
-        shapeRenderer.end()
-
-        // Rysowanie tekstu przycisku
-        batch.begin()
-        val buttonText = "Respawn"
-        glyphLayout.setText(font, buttonText)
-        font.color = Color.WHITE
-        font.draw(batch, buttonText,
-            buttonX + (buttonWidth - glyphLayout.width) / 2,
-            buttonY + buttonHeight / 2 + glyphLayout.height / 2)
-        batch.end()
-
-        // Obsługa kliknięcia przycisku
-        if (isButtonHovered && Gdx.input.justTouched()) {
-            // Wywołaj metodę respawn z głównej klasy gry
-            game.respawnPlayer()
-        }
+    fun render(delta: Float) {
+        if (!visible) return
+        stage.act(delta)
+        stage.draw()
     }
 
     fun resize(width: Int, height: Int) {
-        // Aktualizacja pozycji przycisku po zmianie rozmiaru okna
-        buttonX = (width - buttonWidth) / 2
-        buttonY = height * 0.4f
+        stage.viewport.update(width, height, true)
     }
 
     fun dispose() {
-        batch.dispose()
-        shapeRenderer.dispose()
-        font.dispose()
+        stage.dispose()
     }
 }

@@ -32,86 +32,50 @@ import java.util.UUID
 class Fireball(
     override var x: Float,
     override var y: Float,
-    private val directionX: Float,
-    private val directionY: Float,
+    dirX: Float,
+    dirY: Float,
     override val casterId: String,
     private val targetId: String? = null,
-    private val speed: Float = 350f,
-    private val maxDistance: Float = 450f,
-    private var distanceTraveled: Float = 0f
+    private val targetX: Float,
+    private val targetY: Float,
+    private val speed: Float = 300f,
+    private val radius: Float = 10f
 ) : Skile {
+
     override val id: String = UUID.randomUUID().toString()
     override val color: Color = Color.ORANGE
-    override val size = 12f
-    private val innerSize = 6f
-
-    // Dodaj zmienną dla flagi usuwania
-    private var shouldRemove: Boolean = false
-
-    // Hitbox dla kuli ognia (używany do kolizji)
-    private val hitbox = Rectangle(x - size/2, y - size/2, size, size)
-
-    override fun update(delta: Float): Boolean {
-        // Jeśli strzała jest oznaczona do usunięcia, zwróć false
-        if (shouldRemove) return false
-
-        val moveDistance = speed * delta
-        x += directionX * moveDistance
-        y += directionY * moveDistance
-        distanceTraveled += moveDistance
-
-        // Aktualizuj hitbox
-        hitbox.x = x - size/2
-        hitbox.y = y - size/2
-
-        // Zwraca true jeśli strzała powinna być nadal aktywna
-        return distanceTraveled < maxDistance
-    }
-
-    // Sprawdza kolizję z graczem
-    override fun checkCollision(player: Player): Boolean {
-        if (targetId != null && targetId != player.id) {
-            return false
-        }
-
-        // Prosta kolizja okrąg-okrąg
-        val playerRadius = 15f
-        val centerX = x
-        val centerY = y
-
-        val distance = Vector2.dst(centerX, centerY, player.x, player.y)
-        return distance <= playerRadius + size/2
-    }
-
-    // Implementacja sprawdzania kolizji z przeciwnikiem
-    override fun checkCollision(enemy: EnemyClient): Boolean {
-        if (targetId != null && targetId != "enemy_${enemy.id}") {
-            return false
-        }
-
-        // Podobna implementacja jak dla gracza
-        val enemyRadius = 15f
-        val centerX = x
-        val centerY = y
-
-        val distance = Vector2.dst(centerX, centerY, enemy.x, enemy.y)
-        return distance <= enemyRadius
-    }
-
+    override val size: Float = radius * 2
     override var isToRemove: Boolean = false
 
-    // Implementacja oznaczania pocisku do usunięcia
-    override fun markForRemoval() {
-        shouldRemove = true
+    private val direction = Vector2(dirX, dirY).nor()
+    private val hitbox = Rectangle(x - radius, y - radius, size, size)
+
+    override fun update(delta: Float): Boolean {
+        if (isToRemove) return false
+
+        val move = speed * delta
+        x += direction.x * move
+        y += direction.y * move
+        hitbox.setPosition(x - radius, y - radius)
+
+        val arrived = Vector2.dst(x, y, targetX, targetY) <= 6f
+        if (arrived) markForRemoval()
+
+        return !arrived
     }
 
-    // Metoda do renderowania kuli ognia
+    override fun checkCollision(player: Player) = /* identycznie jak w Arrow */
+        (targetId == null || targetId == player.id) &&
+                Vector2.dst(x, y, player.x, player.y) <= radius + 5f
+
+    override fun checkCollision(enemy: EnemyClient) =
+        (targetId == null || targetId == "enemy_${enemy.id}") &&
+                Vector2.dst(x, y, enemy.x, enemy.y) <= radius + 5f
+
+    override fun markForRemoval() { isToRemove = true }
+
     override fun render(shapeRenderer: ShapeRenderer) {
         shapeRenderer.color = color
-        shapeRenderer.circle(x, y, size)
-
-        // Wewnętrzna część kuli ognia (jaśniejsza)
-        shapeRenderer.color = Color.YELLOW
-        shapeRenderer.circle(x, y, innerSize)
+        shapeRenderer.circle(x, y, radius)
     }
 }

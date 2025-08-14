@@ -1,29 +1,7 @@
-/*
- * This file is part of [GreenVale]
- *
- * [GreenVale] is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * [GreenVale] is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with [GreenVale].  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.decodesoft.enemy
 
 import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.OrthographicCamera
-import com.badlogic.gdx.graphics.g2d.BitmapFont
-import com.badlogic.gdx.graphics.g2d.GlyphLayout
-import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
-import com.badlogic.gdx.math.Vector3
 import pl.decodesoft.Strings
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -40,8 +18,17 @@ class EnemyClient(
     var isSelected: Boolean = false,
     var isAlive: Boolean = true
 ) {
+    // Czas po śmierci (w sekundach)
+    private var timeSinceDeath: Float = 0f
+
+    // Czas po jakim ciało znika (w sekundach) - możesz to dostosować
+    private val corpseDecayTime: Float = 10f
+
+    // Czy ciało powinno być usunięte z gry
+    private var shouldBeRemoved: Boolean = false
+
     // Pozyskaj nazwy po polsku bazując na typie
-    private val displayName: String
+    val displayName: String
         get() = when (type) {
             "Sheep" -> Strings.ENEMY_SHEEP  // "Owca"
             "Wolf" -> Strings.ENEMY_WOLF    // "Wilk"
@@ -95,10 +82,24 @@ class EnemyClient(
         state = newState
     }
 
+    // Metoda do oznaczania przeciwnika jako martwego
+    fun markAsDead() {
+        if (isAlive) {
+            isAlive = false
+            timeSinceDeath = 0f
+        }
+    }
+
     // Aktualizacja pozycji w każdej klatce bazująca na prędkości
     fun update(deltaTimeSeconds: Float) {
-        // Nie aktualizuj martwych przeciwników
-        if (!isAlive) return
+        // Jeśli przeciwnik jest martwy, liczmy czas do usunięcia ciała
+        if (!isAlive) {
+            timeSinceDeath += deltaTimeSeconds
+            if (timeSinceDeath >= corpseDecayTime) {
+                shouldBeRemoved = true
+            }
+            return
+        }
 
         // Oblicz odległość do celu
         val distToTarget = sqrt((targetX - x).pow(2) + (targetY - y).pow(2))
@@ -128,38 +129,18 @@ class EnemyClient(
     }
 
     fun render(shapeRenderer: ShapeRenderer) {
-        // Nie renderuj martwych przeciwników
-        if (!isAlive) return
-        // Standardowe renderowanie przeciwnika
-        shapeRenderer.color = Color.GRAY
-        shapeRenderer.circle(x, y, 15f)
+        if (isAlive) {
+            // Renderuj przeciwnika normalnie (tylko kształt, bez paska życia)
+            shapeRenderer.color = Color.GRAY
+            shapeRenderer.circle(x, y, 15f)
+        } else {
+            // Renderuj ciało po śmierci z efektem zanikania
+            val fadeProgress = timeSinceDeath / corpseDecayTime
+            val alpha = 1f - fadeProgress.coerceIn(0f, 1f)
 
-        // Health bar
-        shapeRenderer.color = Color.DARK_GRAY
-        shapeRenderer.rect(x - 20f, y + 20f, 40f, 6f)
-
-        val ratio = currentHealth.toFloat() / maxHealth
-        shapeRenderer.color = if (ratio > 0.5f) Color.GREEN else if (ratio > 0.25f) Color.ORANGE else Color.RED
-        shapeRenderer.rect(x - 20f, y + 20f, 40f * ratio, 6f)
-    }
-
-    // Zaktualizowana metoda do renderowania nazwy z poziomem
-    fun renderName(batch: SpriteBatch, font: BitmapFont, camera: OrthographicCamera, layout: GlyphLayout) {
-        // Nie renderuj nazw martwych przeciwników
-        if (!isAlive) return
-
-        // Korzystamy z projekcji kamery do obliczenia pozycji na ekranie
-        val posScreen = camera.project(Vector3(x, y, 0f))
-
-        // Nazwa przeciwnika z poziomem w nawiasie
-        val nameText = "$displayName [#FFFF00]($level)"
-        layout.setText(font, nameText)
-
-        // Zmieniam kolor na biały (taki sam jak dla graczy)
-        font.color = Color.WHITE
-
-        // Używamy współrzędnych ekranu z layout dla idealnego wyśrodkowania
-        font.draw(batch, layout, posScreen.x - layout.width / 2, posScreen.y + 40)
+            shapeRenderer.color = Color(0.3f, 0.3f, 0.3f, alpha) // Ciemny kolor z przezroczystością
+            shapeRenderer.circle(x, y, 15f)
+        }
     }
 
     // Dodaj tę metodę dla bezpośredniego ustawiania pozycji i celu
@@ -169,4 +150,10 @@ class EnemyClient(
         targetX = newX
         targetY = newY
     }
+
+    // Metoda pomocnicza do sprawdzenia, czy przeciwnik może być usunięty
+    fun canBeRemoved(): Boolean {
+        return shouldBeRemoved
+    }
+
 }

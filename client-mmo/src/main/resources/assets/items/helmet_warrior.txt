@@ -1,0 +1,7 @@
+id=helmet_warrior
+name=Żelazny Hełm
+type=HELMET
+strengthBonus=3
+agilityBonus=0
+spellPowerBonus=0
+staminaBonus=10

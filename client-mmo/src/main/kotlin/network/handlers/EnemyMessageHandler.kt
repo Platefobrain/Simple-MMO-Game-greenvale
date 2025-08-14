@@ -38,12 +38,12 @@ class EnemyMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
     }
 
     private fun handleEnemyListMessage(parts: List<String>) {
-        println("Client: Received ENEMY_LIST: ${parts[1]}") // Debug
+        // println("Client: Received ENEMY_LIST: ${parts[1]}") // Debug
 
         val list = parts.getOrNull(1)?.split(";") ?: return
-        list.forEach {
+        list.forEachIndexed { index, it ->
             val data = it.split(",")
-            println("Client: Enemy data: $data") // Debug
+            // println("Client: Enemy data: $data") // Debug
 
             if (data.size >= 6) {
                 val id = data[0]
@@ -54,9 +54,7 @@ class EnemyMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
                 val maxHp = data[5].toInt()
                 val level = if (data.size >= 7) data[6].toIntOrNull() ?: 1 else 1
 
-                println("Client: Parsing enemy $id - Type: $type, Level: $level, HP: $hp/$maxHp") // Debug
-
-                // Używamy metody z MMOGame z poziomem
+                // println("Client: Analizowanie wroga #$index - Typ: $type, Level: $level, HP: $hp/$maxHp")
                 game.updateEnemy(id, x, y, type, hp, maxHp, level)
             }
         }

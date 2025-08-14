@@ -1,0 +1,7 @@
+id=sword_01
+name=Iron Sword
+type=WEAPON
+strengthBonus=8
+agilityBonus=0
+spellPowerBonus=0
+staminaBonus=2

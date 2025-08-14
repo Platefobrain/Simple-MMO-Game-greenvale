@@ -25,21 +25,24 @@ import pl.decodesoft.player.manager.UserManager
 import pl.decodesoft.player.model.PlayerData
 import java.util.concurrent.ConcurrentHashMap
 
-
 class PlayerCombatManager(
     private val connections: ConcurrentHashMap<String, DefaultWebSocketSession>,
     private val playerPositions: ConcurrentHashMap<String, PlayerData>,
     private val userManager: UserManager,
     private val enemyManager: EnemyManager
 ) {
-    // Oblicza obrażenia na podstawie typu ataku
-    private fun calculateDamage(attackType: String): Int {
-        return when (attackType) {
-            "ARROW" -> 12
-            "FIREBALL" -> 8
-            "MELEE" -> 250
-            else -> 5
-        }
+    private fun calculateDamage(attackType: String, attackerId: String): Int {
+        // Ataki NPC bez gracza
+        if (attackType == "ENEMY_BITE") return 2
+
+        // Pobierz dane gracza atakującego
+        val attacker = playerPositions[attackerId] ?: return 0
+
+        val characterClass = attacker.characterClass
+        val baseDamage = characterClass.baseDamage
+        val statBonus = attacker.getPrimaryStat() * characterClass.damageModifier
+
+        return (baseDamage + statBonus).toInt()
     }
 
     // Główna funkcja obsługująca trafienia
@@ -49,8 +52,8 @@ class PlayerCombatManager(
             return
         }
 
-        // Oblicz obrażenia na podstawie typu ataku
-        val damage = calculateDamage(attackType)
+        // Oblicz obrażenia z uwzględnieniem statów
+        val damage = calculateDamage(attackType, attackerId)
 
         // Sprawdź czy cel to przeciwnik czy gracz
         if (targetId.startsWith("enemy_")) {
@@ -82,22 +85,45 @@ class PlayerCombatManager(
                 // Przyznanie XP graczowi
                 playerPositions[attackerId]?.let { attacker ->
                     val xpGain = EnemyLevelManager.calculateExperienceReward(enemy.type, enemy.level)
-                    LevelManager.addExperience(attacker, xpGain)
 
-                    // Aktualizacja wybranej postaci użytkownika w bazie
-                    userManager.getUserById(attackerId)?.let { user ->
-                        user.getSelectedCharacter()?.let { character ->
-                            character.level = attacker.level
-                            character.experience = attacker.experience
-                            character.maxHealth = attacker.maxHealth
-                            character.currentHealth = attacker.currentHealth
-                            userManager.updateUser(user)
-                        }
-                    }
+                    // Użyj nowej funkcji która sprawdza level up
+                    val result = LevelManager.addExperience(attacker, xpGain)
 
-                    // Informacja zwrotna
+                    // Wyślij XP_GAINED do wszystkich
                     val xpMsg = "XP_GAINED|${attacker.id}|$xpGain|${attacker.experience}|${attacker.level}"
                     broadcastToAll(xpMsg)
+
+                    // Jeśli nastąpił level up, wyślij LEVEL_UP
+                    if (result.leveledUp) {
+                        val levelUpMessage = "LEVEL_UP|${attacker.id}|${result.newLevel}|${result.newMaxHealth}|${result.newCurrentHealth}|${attacker.experience}|${result.newPrimaryStat}|${result.newStamina}"
+                        broadcastToAll(levelUpMessage)
+                    }
+
+                    // Aktualizacja danych gracza w bazie (PO przyznaniu XP i level up!)
+                    try {
+                        userManager.getUserById(attackerId)?.let { user ->
+                            user.getSelectedCharacter()?.let { character ->
+                                // Aktualizuj podstawowe dane
+                                character.level = attacker.level
+                                character.experience = attacker.experience
+                                character.maxHealth = attacker.maxHealth
+                                character.currentHealth = attacker.currentHealth
+
+                                // Aktualizuj wszystkie statystyki z PlayerData
+                                character.strength = attacker.strength
+                                character.agility = attacker.agility
+                                character.spellPower = attacker.spellPower
+                                character.stamina = attacker.stamina
+
+                                // Zapisz do bazy
+                                userManager.updateUser(user)
+                                println("Zaktualizowano dane gracza $attackerId w bazie - Level: ${attacker.level}, XP: ${attacker.experience}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        println("Błąd podczas zapisywania danych gracza do bazy: ${e.message}")
+                        e.printStackTrace()
+                    }
                 }
             }
         }
@@ -106,13 +132,10 @@ class PlayerCombatManager(
     // Obsługa trafienia gracza
     private suspend fun processPlayerHit(targetId: String, attackerId: String, attackType: String, damage: Int) {
         playerPositions[targetId]?.let { targetPlayer ->
-            // Zadaj obrażenia graczowi
             targetPlayer.takeDamage(damage)
 
-            // Upewnij się, że zdrowie nie spadnie poniżej zera
             if (targetPlayer.currentHealth < 0) targetPlayer.currentHealth = 0
 
-            // Aktualizuj zdrowie gracza w wybranej postaci
             userManager.getUserById(targetId)?.let { user ->
                 user.getSelectedCharacter()?.let { character ->
                     character.currentHealth = targetPlayer.currentHealth
@@ -120,20 +143,15 @@ class PlayerCombatManager(
                 }
             }
 
-            // Wyślij informację o trafieniu do wszystkich graczy
             val broadcastHitMessage = "HIT|$targetId|$attackerId|$attackType|${targetPlayer.currentHealth}|${targetPlayer.maxHealth}"
             broadcastToAll(broadcastHitMessage)
 
-            // Wyślij szczegółową informację o trafieniu do atakującego i celu
             val detailedHitMessage = "HIT_DETAILED|$targetId|$attackerId|$attackType|${targetPlayer.currentHealth}|${targetPlayer.maxHealth}|$damage"
             sendToSpecificPlayers(detailedHitMessage)
 
-            println("Gracz $targetId został trafiony przez $attackerId atakiem: $attackType, pozostałe zdrowie: ${targetPlayer.currentHealth}/${targetPlayer.maxHealth}")
-
-            // Obsługa śmierci gracza jeśli potrzebna
             if (targetPlayer.currentHealth <= 0) {
-                val deathMessage = "PLAYER_DIED|$targetId"
-                broadcastToAll(deathMessage)
+                targetPlayer.isDead = true
+                broadcastToAll("PLAYER_DIED|$targetId")
                 println("Gracz $targetId zginął.")
             }
         }

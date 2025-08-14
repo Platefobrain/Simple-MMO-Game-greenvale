@@ -25,6 +25,7 @@ import pl.decodesoft.enemy.model.EnemyMovementTarget
 import pl.decodesoft.enemy.model.EnemyState
 import pl.decodesoft.enemy.spawn.EnemySpawner
 import pl.decodesoft.map.GameMap
+import pl.decodesoft.player.combat.PlayerCombatManager
 import pl.decodesoft.player.model.PlayerData
 import kotlin.math.cos
 import kotlin.math.pow
@@ -44,6 +45,11 @@ class EnemyManager {
     private val respawnTimers = mutableMapOf<String, Float>()
     private val respawnTime = 15f
 
+    // Regeneracja zdrowia mobów
+    private val regenCooldownTimers = mutableMapOf<String, Float>()
+    private val regenCooldownDuration = 5f // 5 sekund po chase zanim zacznie regen
+    private val healthRegenRate = 1f // punkty zdrowia
+
     // Komponenty zachowania AI
     private val idleBehavior = IdleBehavior()
     private val chaseBehavior = ChaseBehavior()
@@ -52,17 +58,54 @@ class EnemyManager {
     // Spawner przeciwników
     private val enemySpawner = EnemySpawner()
 
+    // Zadawanie obrazeń
+    private val attackCooldowns = mutableMapOf<String, Float>()
+    private val attackRange = 48f
+    private val attackInterval = 1.2f
+
     // Metody spawnowania przeciwników
     fun spawnSheep(x: Float, y: Float, level: Int? = null): Enemy =
-        enemySpawner.spawnSheep(x, y, level, enemies, enemyHomePositions, enemyStates, idleChangeTargetTimers, ::setRandomIdleTarget)
+        enemySpawner.spawnSheep(
+            x,
+            y,
+            level,
+            enemies,
+            enemyHomePositions,
+            enemyStates,
+            idleChangeTargetTimers,
+            ::setRandomIdleTarget
+        )
 
     fun spawnWolf(x: Float, y: Float, level: Int? = null): Enemy =
-        enemySpawner.spawnWolf(x, y, level, enemies, enemyHomePositions, enemyStates, idleChangeTargetTimers, ::setRandomIdleTarget)
+        enemySpawner.spawnWolf(
+            x,
+            y,
+            level,
+            enemies,
+            enemyHomePositions,
+            enemyStates,
+            idleChangeTargetTimers,
+            ::setRandomIdleTarget
+        )
 
     fun spawnBear(x: Float, y: Float, level: Int? = null): Enemy =
-        enemySpawner.spawnBear(x, y, level, enemies, enemyHomePositions, enemyStates, idleChangeTargetTimers, ::setRandomIdleTarget)
+        enemySpawner.spawnBear(
+            x,
+            y,
+            level,
+            enemies,
+            enemyHomePositions,
+            enemyStates,
+            idleChangeTargetTimers,
+            ::setRandomIdleTarget
+        )
 
-    // Nowa metoda do respawnu z zachowaniem poziomu
+    // Filtruje żywych graczy
+    private fun getAlivePlayers(players: Map<String, PlayerData>): Map<String, PlayerData> {
+        return players.filter { !it.value.isDead }
+    }
+
+    // Respawn z zachowaniem poziomu
     private fun respawnEnemy(enemyId: String): Enemy? {
         val deadEnemy = enemies[enemyId] ?: return null
         val homePos = enemyHomePositions[enemyId] ?: return null
@@ -106,13 +149,13 @@ class EnemyManager {
 
         // Utwórz lub zmodyfikuj cel
         val target = enemyTargets[enemyId] ?: EnemyMovementTarget(
-            targetX = tileX * tileSize + tileSize/2,
-            targetY = tileY * tileSize + tileSize/2
+            targetX = tileX * tileSize + tileSize / 2,
+            targetY = tileY * tileSize + tileSize / 2
         )
 
         target.targetId = ""  // Brak konkretnego celu
-        target.targetX = tileX * tileSize + tileSize/2
-        target.targetY = tileY * tileSize + tileSize/2
+        target.targetX = tileX * tileSize + tileSize / 2
+        target.targetY = tileY * tileSize + tileSize / 2
         target.isMoving = true
         target.path.clear()   // Wyczyść starą ścieżkę
         target.currentPathIndex = 0
@@ -122,6 +165,7 @@ class EnemyManager {
     }
 
     // Metody dostępowe
+    fun getEnemy(enemyId: String): Enemy? = enemies[enemyId]
     fun getEnemies(): Collection<Enemy> = enemies.values.filter { it.isAlive }
 
     // Metoda zadawania obrażeń
@@ -166,6 +210,9 @@ class EnemyManager {
 
     // Główna metoda aktualizacji celów przeciwników
     fun updateEnemyTargets(players: Map<String, PlayerData>, gameMap: GameMap, deltaTime: Float) {
+        // Filtruj tylko żywych graczy
+        val alivePlayers = getAlivePlayers(players)
+
         // Dla każdego żywego przeciwnika
         enemies.values.filter { it.isAlive }.forEach { enemy ->
             // Aktualizuj timer zmiany celu dla zachowania Idle
@@ -178,7 +225,7 @@ class EnemyManager {
                 EnemyState.IDLE ->
                     idleBehavior.updateIdleEnemy(
                         enemy,
-                        players,
+                        alivePlayers,
                         gameMap,
                         deltaTime,
                         detectionRange,
@@ -192,7 +239,7 @@ class EnemyManager {
                 EnemyState.CHASE ->
                     chaseBehavior.updateChasingEnemy(
                         enemy,
-                        players,
+                        alivePlayers,
                         gameMap,
                         deltaTime,
                         detectionRange,
@@ -207,7 +254,7 @@ class EnemyManager {
                 EnemyState.RETURN ->
                     returnBehavior.updateReturningEnemy(
                         enemy,
-                        players,
+                        alivePlayers,
                         gameMap,
                         deltaTime,
                         detectionRange,
@@ -216,6 +263,42 @@ class EnemyManager {
                         enemyHomePositions,
                         idleChangeTargetTimers
                     )
+            }
+        }
+    }
+
+    // regeneracji zdrowia mobow
+    fun updateHealthRegen(deltaTime: Float) {
+        enemies.values.filter { it.isAlive }.forEach { enemy ->
+            val id = enemy.id
+            val state = enemyStates[id] ?: EnemyState.IDLE
+
+            when (state) {
+                EnemyState.CHASE -> {
+                    // W stanie CHASE resetuj timer regeneracji (mob jest w walce)
+                    regenCooldownTimers[id] = 0f
+                }
+
+                EnemyState.IDLE, EnemyState.RETURN -> {
+                    // Tylko w stanach IDLE i RETURN może regenerować zdrowie
+                    if (enemy.currentHealth < enemy.maxHealth) {
+                        // Zwiększ timer cooldownu
+                        val currentTimer = regenCooldownTimers.getOrPut(id) { 0f }
+                        val newTimer = currentTimer + deltaTime
+                        regenCooldownTimers[id] = newTimer
+
+                        // Jeśli minął czas cooldownu, rozpocznij regenerację
+                        if (newTimer >= regenCooldownDuration) {
+                            val regenAmount = (healthRegenRate * deltaTime).toInt().coerceAtLeast(1)
+                            enemy.currentHealth = (enemy.currentHealth + regenAmount).coerceAtMost(enemy.maxHealth)
+
+                            // Jeśli osiągnął pełne zdrowie, wyczyść timer
+                            if (enemy.currentHealth >= enemy.maxHealth) {
+                                regenCooldownTimers.remove(id)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -325,7 +408,42 @@ class EnemyManager {
         updatedEnemies.add(enemy)
     }
 
+    // Domyślnie IDLE, jeśli stan nie jest określony
     fun getEnemyState(enemyId: String): String {
-        return enemyStates[enemyId]?.toString() ?: "IDLE" // Domyślnie IDLE, jeśli stan nie jest określony
+        return enemyStates[enemyId]?.toString() ?: "IDLE"
+    }
+
+    suspend fun updateEnemyAttacks(
+        players: Map<String, PlayerData>,
+        deltaTime: Float,
+        combatManager: PlayerCombatManager
+    ) {
+        // Filtruj tylko żywych graczy
+        val alivePlayers = getAlivePlayers(players)
+
+        enemies.values.filter { it.isAlive }.forEach { enemy ->
+            // aktualizacja wewnętrznego timera
+            val timeLeft = (attackCooldowns[enemy.id] ?: 0f) - deltaTime
+            attackCooldowns[enemy.id] = timeLeft
+
+            if (timeLeft > 0f) return@forEach   // jeszcze w cooldownie
+
+            // znajdź pierwszego ŻYWEGO gracza w zasięgu
+            val target = alivePlayers.values.firstOrNull { p ->
+                val dx = p.x - enemy.x
+                val dy = p.y - enemy.y
+                dx * dx + dy * dy < attackRange * attackRange
+            } ?: return@forEach
+
+            // zadaj obrażenia – standardowy kanał HIT
+            combatManager.processHitMessage(
+                targetId = target.id,
+                attackerId = "enemy_${enemy.id}",
+                attackType = "ENEMY_BITE"
+            )
+
+            // reset cooldownu
+            attackCooldowns[enemy.id] = attackInterval
+        }
     }
 }

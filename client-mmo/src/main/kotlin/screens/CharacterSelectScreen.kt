@@ -32,16 +32,18 @@ import com.badlogic.gdx.scenes.scene2d.ui.*
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
 import com.badlogic.gdx.utils.viewport.FitViewport
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import pl.decodesoft.MMOGame
+import pl.decodesoft.Strings
+import pl.decodesoft.Strings.IP_ADDRESS
 
 // Model danych dla listy postaci
 @Serializable
@@ -54,6 +56,14 @@ data class CharactersListResponse(
     val characters: List<CharacterInfo> = emptyList()
 )
 
+// usuwanie postaci
+@Serializable
+data class DeleteCharacterRequest(val userId: String, val characterId: String)
+
+@Serializable
+data class DeleteCharacterResponse(val success: Boolean, val message: String)
+
+// informacje o postaci
 @Serializable
 data class CharacterInfo(
     val id: String,
@@ -62,7 +72,13 @@ data class CharacterInfo(
     val maxHealth: Int = 100,
     val currentHealth: Int = 100,
     val level: Int = 1,
-    val experience: Int = 0
+    val experience: Int = 0,
+    var lastX: Float = 500f, // Ostatnia pozycja X
+    var lastY: Float = 600f,  // Ostatnia pozycja Y
+    var spellPower: Int = 0,
+    var strength: Int = 0,
+    var agility: Int = 0,
+    var stamina: Int = 0
 )
 
 // Ekran wyboru postaci z systemem slotów
@@ -100,7 +116,7 @@ class CharacterSelectionScreen(
         batch = SpriteBatch()
 
         // Wczytaj czcionkę
-        val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/OpenSans-Regular.ttf"))
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/ChakraPetch-SemiBold.ttf"))
         val parameter = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
             size = 24
             characters = FreeTypeFontGenerator.DEFAULT_CHARS + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
@@ -143,12 +159,12 @@ class CharacterSelectionScreen(
         selectionScope.launch {
             try {
                 // Pobierz listę postaci użytkownika
-                val response = httpClient.post("http://localhost:8081/character/list") {
+                val response = httpClient.post("http://$IP_ADDRESS/character/list") {
                     contentType(ContentType.Application.Json)
                     setBody(CharactersListRequest(userId))
                 }
 
-                val charactersResponse = Json.decodeFromString<CharactersListResponse>(response.bodyAsText())
+                val charactersResponse = response.body<CharactersListResponse>()
 
                 if (charactersResponse.success) {
                     // Aktualizuj listę postaci (max 3)
@@ -259,10 +275,8 @@ class CharacterSelectionScreen(
 
             val classLabel = Label(getClassName(character.characterClass), skin)
 
-            // Etykieta poziomu
-            val levelLabel = Label("Poziom: ${character.level}", skin)
+            val levelLabel = Label("${Strings.LEVEL}: ${character.level}", skin)
 
-            // Obraz postaci
             val characterImage = if (::archerTexture.isInitialized && ::mageTexture.isInitialized && ::warriorTexture.isInitialized) {
                 Image(when (character.characterClass) {
                     0 -> archerTexture
@@ -270,12 +284,11 @@ class CharacterSelectionScreen(
                     else -> warriorTexture
                 })
             } else {
-                // Jeśli tekstury nie są dostępne, tworzymy kolorowy kwadrat
                 val colorSquare = Table()
                 colorSquare.background = skin.newDrawable("white", when (character.characterClass) {
-                    0 -> Color(0.2f, 0.8f, 0.2f, 1f) // Zielony dla łucznika
-                    1 -> Color(0.2f, 0.2f, 0.9f, 1f) // Niebieski dla maga
-                    else -> Color(0.9f, 0.2f, 0.2f, 1f) // Czerwony dla wojownika
+                    0 -> Color(0.2f, 0.8f, 0.2f, 1f)
+                    1 -> Color(0.2f, 0.2f, 0.9f, 1f)
+                    else -> Color(0.9f, 0.2f, 0.2f, 1f)
                 })
                 colorSquare
             }
@@ -285,30 +298,43 @@ class CharacterSelectionScreen(
             val playButton = TextButton("Graj", skin)
             playButton.addListener(object : ChangeListener() {
                 override fun changed(event: ChangeEvent?, actor: Actor?) {
-                    // Wybór postaci i rozpoczęcie gry
                     selectCharacter(slotIndex, character)
+                }
+            })
+
+            val deleteButton = TextButton("Usuń", skin)
+            deleteButton.addListener(object : ChangeListener() {
+                override fun changed(event: ChangeEvent?, actor: Actor?) {
+                    showConfirmDeleteDialog(character.nickname) {
+                        selectionScope.launch {
+                            deleteCharacter(userId, character.id)
+                            // Po usunięciu postaci odśwież listę
+                            loadCharacters()
+                        }
+                    }
                 }
             })
 
             // Układ elementów w panelu
             panel.add(nameLabel).colspan(2).pad(5f)
             panel.row()
-            panel.add(classLabel).colspan(2).pad(5f)
+            panel.add(classLabel).colspan(2).pad(0f)
             panel.row()
-            panel.add(levelLabel).colspan(2).pad(5f)
+            panel.add(levelLabel).colspan(2).pad(0f)
             panel.row()
-            panel.add(characterImage).size(128f, 128f).pad(10f)
+            panel.add(characterImage).size(128f, 128f).pad(0f)
             panel.row()
             panel.add(healthLabel).pad(5f)
             panel.row()
             panel.add(playButton).width(120f).height(40f).pad(10f)
+            panel.row()
+            panel.add(deleteButton).width(100f).height(40f).pad(5f)
 
         } else {
             // Pusty slot
             val emptyLabel = Label("Pusty slot", skin)
             emptyLabel.setFontScale(1.2f)
 
-            // Grafika pustego slotu
             val emptyImage = if (::emptySlotTexture.isInitialized) {
                 Image(emptySlotTexture)
             } else {
@@ -346,12 +372,12 @@ class CharacterSelectionScreen(
         selectionScope.launch {
             try {
                 // Żądanie wyboru postaci
-                val response = httpClient.post("http://localhost:8081/character/select") {
+                val response = httpClient.post("http://$IP_ADDRESS/character/select") {
                     contentType(ContentType.Application.Json)
                     setBody(CharacterSelectRequest(userId, slotIndex))
                 }
 
-                val selectResponse = Json.decodeFromString<CharacterSelectResponse>(response.bodyAsText())
+                val selectResponse = response.body<CharacterSelectResponse>()
 
                 if (selectResponse.success) {
                     // Przejście do gry z wybraną postacią
@@ -370,6 +396,66 @@ class CharacterSelectionScreen(
     private fun createNewCharacter(slotIndex: Int) {
         // Przejście do ekranu tworzenia postaci
         game.showCharacterCreationScreen(slotIndex)
+    }
+
+    private suspend fun deleteCharacter(userId: String, characterId: String) {
+        try {
+            val request = DeleteCharacterRequest(userId, characterId)
+            val response = httpClient.post("http://$IP_ADDRESS/character/delete") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+
+            val deleteResponse = response.body<DeleteCharacterResponse>()
+
+            if (deleteResponse.success) {
+                Gdx.app.postRunnable {
+                    showInfoDialog(deleteResponse.message)
+                    loadCharacters() // odśwież sloty postaci
+                }
+            } else {
+                Gdx.app.postRunnable {
+                    showErrorDialog(deleteResponse.message)
+                }
+            }
+        } catch (e: Exception) {
+            Gdx.app.postRunnable {
+                showErrorDialog("Nie udało się połączyć z serwerem")
+            }
+        }
+    }
+
+    private fun showErrorDialog(message: String) {
+        val dialog = Dialog("Błąd", skin)
+        dialog.text(message)
+        dialog.button("OK")
+        dialog.isModal = true
+        dialog.isMovable = false
+        dialog.show(stage)
+    }
+
+    private fun showInfoDialog(message: String) {
+        // przykładowa implementacja z LibGDX Dialog
+        val dialog = Dialog("Informacja", skin)
+        dialog.text(message)
+        dialog.button("OK")
+        dialog.show(stage)
+    }
+
+    private fun showConfirmDeleteDialog(characterName: String, onConfirm: () -> Unit) {
+        val dialog = object : Dialog("Usuń postać", skin) {
+            override fun result(obj: Any?) {
+                if (obj == true) {
+                    onConfirm()
+                }
+            }
+        }
+        dialog.text("Czy na pewno chcesz usunąć postać '$characterName'?")
+        dialog.button("Tak", true)
+        dialog.button("Nie", false)
+        dialog.isModal = true
+        dialog.isMovable = false
+        dialog.show(stage)
     }
 
     override fun render(delta: Float) {

@@ -50,11 +50,6 @@ Skile.kt (interfejs)
 Definiuje kontrakt dla wszystkich umiejętności
 Ujednolicone API
 
-ChargeWarrior.kt
-
-Specjalna umiejętność szarży dla wojownika
-Złożona logika ruchu i kolizji
-
 Mapa i komunikacja
 GameMap.kt
 
@@ -232,16 +227,3 @@ Presentation: Screens, UI components
 Game Logic: Character classes, combat system
 Network: Message handlers, communication
 Data: Player, Enemy, Loot models
-
-Główne mocne strony:
-✅ Czytelna architektura z separacją odpowiedzialności
-✅ Skalowalna struktura handlerów wiadomości
-✅ Elastyczny system stanów gry
-✅ Thread-safe komunikacja sieciowa
-✅ Optymalizacje wydajnościowe (square distance, filtering)
-Obszary do poprawy:
-❌ Niespójność językowa (polski/angielski)
-❌ Hardcoded wartości liczbowe
-❌ Niektóre zbyt długie metody
-❌ Brak kompletnej obsługi błędów
-❌ Potencjalne wycieki pamięci w dispose()

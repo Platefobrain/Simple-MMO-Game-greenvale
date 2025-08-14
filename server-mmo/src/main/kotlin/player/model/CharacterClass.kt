@@ -18,8 +18,15 @@
 package pl.decodesoft.player.model
 
 // Wyliczenie dostępnych klas postaci
-enum class CharacterClass {
-    ARCHER, // Łucznik
-    MAGE,   // Mag
-    WARRIOR // Wojownik
+enum class CharacterClass(
+    val healthModifier: Double,
+    val baseHealth: Int,
+    val manaModifier: Double,
+    val baseMana: Int,
+    val damageModifier: Double,
+    val baseDamage: Int
+) {
+    ARCHER(1.7, 60, 1.0, 55, 1.5, 7),
+    MAGE(1.5, 52, 1.0, 75, 2.0, 5),
+    WARRIOR(1.9, 66, 1.0, 20, 1.0, 9)
 }

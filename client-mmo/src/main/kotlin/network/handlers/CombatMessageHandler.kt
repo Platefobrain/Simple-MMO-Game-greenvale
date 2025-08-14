@@ -17,6 +17,7 @@
 
 package pl.decodesoft.network.handlers
 
+import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import pl.decodesoft.MMOGame
 import pl.decodesoft.network.BaseMessageHandler
@@ -24,7 +25,7 @@ import pl.decodesoft.network.BaseMessageHandler
 // Handler obsługujący wiadomości związane z walką
 class CombatMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
     override val supportedMessageTypes = setOf(
-        "HIT", "HIT_DETAILED", "HEALTH_UPDATE", "PLAYER_DIED", "RESPAWN",
+        "HIT", "HIT_DETAILED", "HEALTH_UPDATE", "MANA_UPDATE", "PLAYER_DIED", "RESPAWN",
         "RANGED_ATTACK", "SPELL_ATTACK", "MELEE_ATTACK"
     )
 
@@ -33,6 +34,7 @@ class CombatMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
             "HIT" -> handleHitMessage(parts)
             "HIT_DETAILED" -> handleHitDetailedMessage(parts)
             "HEALTH_UPDATE" -> handleHealthUpdateMessage(parts)
+            "MANA_UPDATE" -> handleManaUpdateMessage(parts)
             "PLAYER_DIED" -> handlePlayerDiedMessage(parts)
             "RESPAWN" -> handleRespawnMessage(parts)
             "RANGED_ATTACK", "SPELL_ATTACK", "MELEE_ATTACK" -> handleAttackMessage(parts)
@@ -80,8 +82,15 @@ class CombatMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
             } else {
                 game.updatePlayerHealth(targetId, currentHealth, maxHealth)
 
+                // *** DODAJ OBRAŻENIA UI DLA LOKALNEGO GRACZA ***
+                if (targetId == game.localPlayerId) {
+                    // Gracz lokalny otrzymał obrażenia - pokaż w UI
+                    val damageColor = if (damage > 30) Color.ORANGE else Color.RED // Krytyczne vs normalne
+                    game.gameUI?.addPlayerDamageText("-$damage", damageColor)
+                }
+
                 // Pokazujemy tekstowy wskaźnik obrażeń tylko jeśli jesteśmy atakującym lub atakowanym
-                if (targetId == game.localPlayerId || attackerId == game.localPlayerId) {
+                if ((targetId == game.localPlayerId || attackerId == game.localPlayerId) && targetId != game.localPlayerId) {
                     val player = game.getPlayer(targetId)
                     player?.let {
                         game.addDamageText(it.x, it.y + 20f, "-$damage", Color.WHITE)
@@ -101,6 +110,17 @@ class CombatMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
         }
     }
 
+    // mana update
+    private fun handleManaUpdateMessage(parts: List<String>) {
+        if (parts.size >= 4) {
+            val playerId = parts[1]
+            val currentMana = parts[2].toIntOrNull() ?: 0
+            val maxMana = parts[3].toIntOrNull() ?: 100
+
+            game.updatePlayerMana(playerId, currentMana, maxMana)
+        }
+    }
+
     private fun handlePlayerDiedMessage(parts: List<String>) {
         if (parts.size >= 2) {
             val playerId = parts[1]
@@ -114,11 +134,42 @@ class CombatMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
             val currentHealth = parts[2].toIntOrNull() ?: 100
             val maxHealth = parts[3].toIntOrNull() ?: 100
 
-            game.respawnPlayer(playerId, currentHealth, maxHealth)
+            // Sprawdź czy wiadomość zawiera pozycję (nowy format)
+            if (parts.size >= 6) {
+                val x = parts[4].toFloatOrNull() ?: 0f
+                val y = parts[5].toFloatOrNull() ?: 0f
+
+                game.respawnPlayerWithPosition(playerId, currentHealth, maxHealth, x, y)
+            } else {
+                // Stary format bez pozycji
+                game.respawnPlayerHealth(playerId, currentHealth, maxHealth)
+            }
         }
     }
 
     private fun handleAttackMessage(parts: List<String>) {
+        // println("ATTACK MSG: ${parts.joinToString()}")
+
         game.handleAttackMessage(parts[0], parts)
+
+        // Jeśli wiadomość ma wystarczającą ilość danych
+        if (parts.size >= 4) {
+            val attackType = parts[0]
+            val attackerId = parts[1]
+            val targetId = parts[2]
+            val spellOrWeapon = parts[3]
+
+            // Przykładowa wiadomość tekstowa
+            val readableAttackType = when (attackType) {
+                "MELEE_ATTACK" -> "atakuje wręcz"
+                "RANGED_ATTACK" -> "strzela do"
+                "SPELL_ATTACK" -> "rzuca czar na"
+                else -> "atakują"
+            }
+
+            Gdx.app.postRunnable {
+                game.receiveNetworkCombatLog("$attackerId $readableAttackType $targetId\" $spellOrWeapon\"")
+            }
+        }
     }
 }

@@ -42,6 +42,8 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import pl.decodesoft.MMOGame
+import pl.decodesoft.Strings
+import pl.decodesoft.Strings.IP_ADDRESS
 
 @Serializable
 data class CharacterCreateRequest(
@@ -75,7 +77,7 @@ class CharacterCreationScreen(
     private lateinit var mageTexture: Texture
     private lateinit var warriorTexture: Texture
 
-    private var selectedClass = 2 // Domyślnie wojownik (0-łucznik, 1-mag, 2-wojownik)
+    private var selectedClass = 0 // Domyślnie wojownik (0-łucznik, 1-mag, 2-wojownik)
     private var nicknameField: TextField? = null
     private var playerNickname: String = username // Domyślnie ustawione na username
 
@@ -92,7 +94,7 @@ class CharacterCreationScreen(
         batch = SpriteBatch()
 
         // Wczytaj czcionkę
-        val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/OpenSans-Regular.ttf"))
+        val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/ChakraPetch-SemiBold.ttf"))
         val parameter = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
             size = 24
             characters = FreeTypeFontGenerator.DEFAULT_CHARS + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
@@ -174,7 +176,7 @@ class CharacterCreationScreen(
             }
         })
 
-        val loggedAsLabel = Label("Zalogowany jako: $username (Slot ${slotIndex + 1})", skin)
+        val loggedAsLabel = Label("${Strings.LOGGED_AS}: $username (Slot ${slotIndex + 1})", skin)
 
         // Tworzenie tabeli z klasami
         val classesTable = Table()
@@ -293,7 +295,7 @@ class CharacterCreationScreen(
 
         creationScope.launch {
             try {
-                val response = httpClient.post("http://localhost:8081/character/create") {
+                val response = httpClient.post("http://$IP_ADDRESS/character/create") {
                     contentType(ContentType.Application.Json)
                     setBody(CharacterCreateRequest(userId, selectedClass, playerNickname, slotIndex))
                 }

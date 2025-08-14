@@ -23,17 +23,17 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import pl.decodesoft.klasy.projectiles.Fireball
 import pl.decodesoft.klasy.skile.SkileManager
+import pl.decodesoft.network.MessageManager
 import pl.decodesoft.player.Player
 
-/**
- * Klasa reprezentująca Maga
- */
+// Klasa reprezentująca Maga
 class Mage(
     player: Player,
     networkScope: CoroutineScope,
     session: () -> DefaultWebSocketSession?,
-    skileManager: SkileManager
-) : CharacterClass(player, networkScope, session, skileManager) {
+    skileManager: SkileManager,
+    messageManager: MessageManager
+) : CharacterClass(player, networkScope, session, skileManager, messageManager) { // POPRAWKA: messageManager zamiast MessageManager
 
     // Nadpisane właściwości z klasy bazowej
     override val attackCooldown = 4.0f
@@ -42,9 +42,7 @@ class Mage(
     override val attackName = "Kula ognia"
     override val attackColor: Color = Color.FIREBRICK
 
-    /**
-     * Rzucenie kuli ognia w określonym kierunku
-     */
+    // Rzucenie kuli ognia w określonym kierunku
     override fun performAttack(targetX: Float, targetY: Float, targetId: String) {
         // Oblicz kierunek kuli ognia
         val dirX = targetX - player.x
@@ -62,7 +60,9 @@ class Mage(
             normalizedDirX,
             normalizedDirY,
             player.id,
-            targetId
+            targetId,
+            targetX,
+            targetY
         )
 
         // Dodaj kulę ognia do menedżera umiejętności

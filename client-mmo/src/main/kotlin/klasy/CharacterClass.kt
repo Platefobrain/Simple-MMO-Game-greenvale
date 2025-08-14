@@ -19,12 +19,6 @@ package pl.decodesoft.klasy
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.GL20
-import com.badlogic.gdx.graphics.OrthographicCamera
-import com.badlogic.gdx.graphics.g2d.BitmapFont
-import com.badlogic.gdx.graphics.g2d.GlyphLayout
-import com.badlogic.gdx.graphics.g2d.SpriteBatch
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Vector2
 import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
@@ -32,15 +26,15 @@ import kotlinx.coroutines.launch
 import pl.decodesoft.enemy.EnemyClient
 import pl.decodesoft.player.Player
 import pl.decodesoft.klasy.skile.SkileManager
+import pl.decodesoft.network.MessageManager
 
-/**
- * Abstrakcyjna klasa bazowa dla wszystkich klas postaci w grze
- */
+// Abstrakcyjna klasa bazowa dla wszystkich klas postaci w grze
 abstract class CharacterClass(
     protected val player: Player,
     protected val networkScope: CoroutineScope,
     protected val session: () -> DefaultWebSocketSession?,
-    protected val skileManager: SkileManager
+    protected val skileManager: SkileManager,
+    private val messageManager: MessageManager
 ) {
     // Wspólne właściwości dla wszystkich klas postaci
     private var targetPlayer: Player? = null
@@ -53,9 +47,7 @@ abstract class CharacterClass(
     protected abstract val attackName: String
     protected abstract val attackColor: Color
 
-    /**
-     * Aktualizacja stanu postaci
-     */
+    // Aktualizacja stanu postaci
     open fun update(delta: Float) {
         // Odliczaj czas cooldownu
         if (attackTimer > 0) {
@@ -93,10 +85,14 @@ abstract class CharacterClass(
         }
     }
 
-    /**
-     * Obsługa kliknięcia na przeciwnika
-     */
+    // Obsługa kliknięcia na przeciwnika
     open fun handleEnemyClick(targetEnemy: EnemyClient): Boolean {
+        // Sprawdź czy jest cooldown - jeśli tak, zablokuj atak
+        if (isOnCooldown()) {
+            messageManager.showMessage("Masz cooldown!", 2f, Color.RED)
+            return false
+        }
+
         // Resetuj cel gracza przy wyborze przeciwnika
         this.targetEnemy = targetEnemy
         this.targetPlayer = null
@@ -117,10 +113,14 @@ abstract class CharacterClass(
         return false
     }
 
-    /**
-     * Obsługa kliknięcia na gracza
-     */
+    // Obsługa kliknięcia na gracza
     open fun handleTargetClick(targetPlayer: Player): Boolean {
+        // Sprawdź czy jest cooldown - jeśli tak, zablokuj atak
+        if (isOnCooldown()) {
+            messageManager.showMessage("Masz cooldown!", 2f)
+            return false
+        }
+
         // Ustaw gracza jako cel do podejścia
         this.targetPlayer = targetPlayer
         this.targetEnemy = null // Wyczyść poprzedni cel przeciwnika
@@ -141,14 +141,10 @@ abstract class CharacterClass(
         return false
     }
 
-    /**
-     * Metoda abstrakcyjna do wykonania ataku
-     */
+    // Metoda abstrakcyjna do wykonania ataku
     protected abstract fun performAttack(targetX: Float, targetY: Float, targetId: String)
 
-    /**
-     * Metoda do wysyłania wiadomości o ataku na serwer
-     */
+    // Metoda do wysyłania wiadomości o ataku na serwer
     protected fun sendAttackMessage(
         attackType: String,
         targetX: Float,
@@ -161,7 +157,7 @@ abstract class CharacterClass(
             try {
                 // Najpierw definiujemy zmienną message
                 val message = "$attackType|${player.x}|${player.y}|$normalizedDirX|$normalizedDirY|${player.id}|$targetId"
-                
+
                 val currentSession: DefaultWebSocketSession? = session()
                 if (currentSession != null) {
                     currentSession.send(Frame.Text(message))
@@ -174,92 +170,24 @@ abstract class CharacterClass(
         }
     }
 
-    //Renderowanie wskaźnika cooldownu
-    open fun renderCooldownBar(shapeRenderer: ShapeRenderer, batch: SpriteBatch, font: BitmapFont, camera: OrthographicCamera) {
-        // Pobierz pozycję kamery
-        val cameraX = camera.position.x - camera.viewportWidth / 2
-        val cameraY = camera.position.y - camera.viewportHeight / 2
+    // Gettery do odczytu stanu cooldownu przez GameUI
+    fun getCooldownProgress(): Float {
+        return if (attackTimer > 0) 1 - (attackTimer / attackCooldown) else 1f
+    }
 
-        // Wymiary paska
-        val barWidth = 200f
-        val barHeight = 20f
+    fun getRemainingCooldownTime(): Float {
+        return attackTimer
+    }
 
-        // Pozycjonowanie paska względem kamery, a nie gracza
-        val barX = cameraX + (camera.viewportWidth / 2) - (barWidth / 2) // Wyśrodkowany na ekranie
-        val barY = cameraY + 250f // 50 pikseli od dołu ekranu
+    fun isOnCooldown(): Boolean {
+        return attackTimer > 0
+    }
 
-        // Włączamy blending dla przezroczystości
-        Gdx.gl.glEnable(GL20.GL_BLEND)
-        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA)
+    fun getCurrentAttackName(): String {
+        return attackName
+    }
 
-        if (attackTimer > 0) {
-            // Rysowanie tła paska
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-            shapeRenderer.color = Color(0.2f, 0.2f, 0.2f, 0.7f) // Ciemnoszary z przezroczystością
-            shapeRenderer.rect(barX, barY, barWidth, barHeight)
-
-            // Rysowanie paska postępu
-            val progress = 1 - (attackTimer / attackCooldown)
-            val attackColorWithAlpha = attackColor.cpy().also { it.a = 0.9f } // Kopia koloru ataku z przezroczystością
-            shapeRenderer.color = attackColorWithAlpha
-            shapeRenderer.rect(barX, barY, barWidth * progress, barHeight)
-            shapeRenderer.end()
-
-            // Zapisujemy obecny kolor czcionki przed zmianą
-            val oldColor = Color(font.color)
-
-            // Tekst cooldownu
-            batch.begin()
-            font.color = Color.WHITE
-
-            // Tekst cooldownu
-            val cooldownText = "$attackName: ${String.format("%.1f", attackTimer)}s"
-
-            // Używamy istniejącego GlyphLayout jeśli dostępny, w przeciwnym razie tworzymy nowy
-            val layout = GlyphLayout(font, cooldownText)
-
-            // Wyśrodkowanie tekstu w pasku
-            val textX = barX + (barWidth - layout.width) / 2
-            val textY = barY + (barHeight + layout.height) / 2
-
-            font.draw(batch, cooldownText, textX, textY)
-
-            // Przywracamy oryginalny kolor czcionki - WAŻNE
-            font.color = oldColor
-
-            batch.end()
-        } else {
-            // Cooldown zakończony - pokaż pełny pasek
-            shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-            shapeRenderer.color = Color(0.0f, 0.8f, 0.0f, 0.9f) // Zielony z przezroczystością
-            shapeRenderer.rect(barX, barY, barWidth, barHeight)
-            shapeRenderer.end()
-
-            // Zapisujemy obecny kolor czcionki przed zmianą
-            val oldColor = Color(font.color)
-
-            batch.begin()
-            font.color = Color.WHITE
-
-            // Tekst "Gotowy do ataku!"
-            val readyText = "Gotowy do ataku!"
-
-            // Używamy istniejącego GlyphLayout jeśli dostępny, w przeciwnym razie tworzymy nowy
-            val layout = GlyphLayout(font, readyText)
-
-            // Wyśrodkowanie tekstu w pasku
-            val textX = barX + (barWidth - layout.width) / 2
-            val textY = barY + (barHeight + layout.height) / 2
-
-            font.draw(batch, readyText, textX, textY)
-
-            // Przywracamy oryginalny kolor czcionki - WAŻNE
-            font.color = oldColor
-
-            batch.end()
-        }
-
-        // Opcjonalnie wyłączamy blending, jeśli nie jest używany w innych miejscach
-        // Gdx.gl.glDisable(GL20.GL_BLEND);
+    fun getCurrentAttackColor(): Color {
+        return attackColor
     }
 }

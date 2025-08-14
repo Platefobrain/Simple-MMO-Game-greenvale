@@ -29,7 +29,7 @@ class EnemySpawner {
         // Oblicz zdrowie na podstawie typu i poziomu
         val health = EnemyLevelManager.calculateHealthForLevel(type, enemyLevel)
 
-        // WAŻNE: Jawnie przekaż wszystkie parametry do konstruktora
+        // do konstruktora
         val enemy = Enemy(
             id = java.util.UUID.randomUUID().toString(),
             x = x,
@@ -37,7 +37,7 @@ class EnemySpawner {
             type = type,
             currentHealth = health,
             maxHealth = health,
-            level = enemyLevel,  // <-- Upewnij się, że to jest przekazane
+            level = enemyLevel,
             isAlive = true,
             displayName = Enemy.getDisplayNameForType(type)
         )

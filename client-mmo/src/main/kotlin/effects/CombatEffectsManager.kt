@@ -21,9 +21,7 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 
-/**
- * Klasa zarządzająca efektami walki, jak teksty obrażeń
- */
+// Klasa zarządzająca efektami walki, jak teksty obrażeń
 class CombatEffectsManager {
     // Klasa do przechowywania efektów tekstowych obrażeń
     private class DamageText(
@@ -31,7 +29,7 @@ class CombatEffectsManager {
         var y: Float,
         val text: String,
         val color: Color,
-        var alpha: Float = 1.0f,
+        var alpha: Float = 1.5f,
         var lifetime: Float = 0f
     )
 
@@ -53,25 +51,28 @@ class CombatEffectsManager {
         }
 
         // Usuwanie starych efektów
-        damageTexts.removeAll { it.lifetime > 1.0f }
+        damageTexts.removeAll { it.lifetime > 1.5f }
     }
 
     // Renderowanie efektów tekstowych obrażeń
     fun render(batch: SpriteBatch, font: BitmapFont) {
         if (damageTexts.isEmpty()) return
 
-        // Zapisz oryginalny kolor czcionki
+        // Zapisz oryginalny kolor i rozmiar czcionki
         val originalColor = font.color.cpy()
+        val originalScaleX = font.data.scaleX
+        val originalScaleY = font.data.scaleY
 
-        batch.begin()
+        // ZWIĘKSZ ROZMIAR CZCIONKI
+        font.data.setScale(1.3f) // 2x większy tekst (możesz zmienić na 1.5f, 2.5f itp.)
+
         damageTexts.forEach { text ->
             font.color = Color(text.color.r, text.color.g, text.color.b, text.alpha)
             font.draw(batch, text.text, text.x - 10f, text.y)
         }
 
-        // Przywróć oryginalny kolor czcionki po zakończeniu renderowania
+        // Przywróć oryginalny rozmiar i kolor czcionki po zakończeniu renderowania
+        font.data.setScale(originalScaleX, originalScaleY)
         font.color = originalColor
-
-        batch.end()
     }
 }

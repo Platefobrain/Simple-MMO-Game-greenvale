@@ -10,7 +10,12 @@ class TextMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
 
     // Nadpisujemy metodę canHandle, aby sprawdzać czy wiadomość jest zwykłym tekstem
     override fun canHandle(messageType: String): Boolean {
-        return !messageType.contains("|")
+        return !messageType.contains("|") &&
+                !messageType.startsWith("ITEM_") &&
+                !messageType.startsWith("PLAYER_") &&
+                !messageType.startsWith("ENEMY_") &&
+                !messageType.startsWith("CHAT") &&
+                !messageType.startsWith("STATS_")
     }
 
     override fun handleMessage(parts: List<String>) {
@@ -18,7 +23,7 @@ class TextMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
         val message = parts.joinToString(" ")
 
         Gdx.app.postRunnable {
-            game.receiveSystemMessage(message)
+            game.receiveNetworkChatMessage("SERVER", "Serwer", message)
         }
 
         // Dodatkowo logujemy wiadomość w konsoli

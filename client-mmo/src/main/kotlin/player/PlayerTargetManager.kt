@@ -24,9 +24,7 @@ import com.badlogic.gdx.math.Vector3
 import pl.decodesoft.enemy.EnemyClient
 import pl.decodesoft.klasy.CharacterClass
 
-/**
- * Klasa zarządzająca celami gracza
- */
+// Klasa zarządzająca celami gracza
 class PlayerTargetManager(
     private val camera: OrthographicCamera,
     private val localPlayer: Player,
@@ -35,7 +33,7 @@ class PlayerTargetManager(
     private val characterClass: CharacterClass,
     private val onTargetChanged: (Any?, String?) -> Unit
 ) {
-    // Właściwości z prywatnym setterem - bardziej idiomatyczne w Kotlin
+    // Właściwości z prywatnym setterem
     private var selectedEntityId: String? = null
     private var selectedEntityType: String? = null
     private var lastPlayerTarget: Player? = null

@@ -23,17 +23,17 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import pl.decodesoft.klasy.projectiles.Arrow
 import pl.decodesoft.klasy.skile.SkileManager
+import pl.decodesoft.network.MessageManager
 import pl.decodesoft.player.Player
 
-/**
- * Klasa reprezentująca Łucznika
- */
+// Klasa reprezentująca Łucznika
 class Archer(
     player: Player,
     networkScope: CoroutineScope,
     session: () -> DefaultWebSocketSession?,
-    skileManager: SkileManager
-) : CharacterClass(player, networkScope, session, skileManager) {
+    skileManager: SkileManager,
+    messageManager: MessageManager // Dodaj MessageManager
+) : CharacterClass(player, networkScope, session, skileManager, messageManager) {
 
     // Nadpisane właściwości z klasy bazowej
     override val attackCooldown = 3.0f
@@ -42,9 +42,7 @@ class Archer(
     override val attackName = "Strzał"
     override val attackColor: Color = Color.ORANGE
 
-    /**
-     * Wystrzelenie strzały w określonym kierunku
-     */
+    // strzały
     override fun performAttack(targetX: Float, targetY: Float, targetId: String) {
         // Oblicz kierunek strzały
         val dirX = targetX - player.x
@@ -62,7 +60,9 @@ class Archer(
             normalizedDirX,
             normalizedDirY,
             player.id,
-            targetId
+            targetId,
+            targetX,
+            targetY
         )
 
         // Dodaj strzałę do menedżera umiejętności

@@ -24,117 +24,69 @@ import com.badlogic.gdx.math.Vector2
 import pl.decodesoft.enemy.EnemyClient
 import pl.decodesoft.player.Player
 import pl.decodesoft.klasy.skile.Skile
-import kotlin.math.atan2
 import java.util.UUID
+import kotlin.math.atan2
 
-/**
- * Klasa reprezentująca strzałę wystrzeloną przez Łucznika
- */
+//Strzała wystrzelona przez Łucznika.
 class Arrow(
     override var x: Float,
     override var y: Float,
-    private val directionX: Float,
-    private val directionY: Float,
+    dirX: Float,
+    dirY: Float,
     override val casterId: String,
     private val targetId: String? = null,
-    private val speed: Float = 400f,
-    private val maxDistance: Float = 500f,
-    private var distanceTraveled: Float = 0f
+    private val targetX: Float,
+    private val targetY: Float,
+    private val speed: Float = 400f
 ) : Skile {
+
     override val id: String = UUID.randomUUID().toString()
     override val color: Color = Color.YELLOW
-    override val size = 8f
-
-    // Dodaj zmienną dla flagi usuwania
-    private var shouldRemove: Boolean = false
-
-    // Hitbox dla strzały (używany do kolizji)
-    private val hitbox = Rectangle(x - size/2, y - size/2, size, size)
-
-    // Kąt strzały w stopniach (do renderowania)
-    private val angle: Float
-        get() = Math.toDegrees(atan2(directionY.toDouble(), directionX.toDouble())).toFloat()
-
-    override fun update(delta: Float): Boolean {
-        // Jeśli strzała jest oznaczona do usunięcia, zwróć false
-        if (shouldRemove) return false
-
-        val moveDistance = speed * delta
-        x += directionX * moveDistance
-        y += directionY * moveDistance
-        distanceTraveled += moveDistance
-
-        // Aktualizuj hitbox
-        hitbox.x = x - size/2
-        hitbox.y = y - size/2
-
-        // Zwraca true jeśli strzała powinna być nadal aktywna
-        return distanceTraveled < maxDistance
-    }
-
-    // Sprawdza kolizję z graczem
-    override fun checkCollision(player: Player): Boolean {
-        if (targetId != null && targetId != player.id) {
-            return false
-        }
-
-        // Prosta kolizja okrąg-prostokąt
-        val playerRadius = 15f
-        val centerX = x
-        val centerY = y
-
-        val distance = Vector2.dst(centerX, centerY, player.x, player.y)
-        return distance <= playerRadius
-    }
-
-    // Sprawdza kolizję z przeciwnikiem
-    override fun checkCollision(enemy: EnemyClient): Boolean {
-        // Jeśli mamy określony cel, sprawdzaj kolizje tylko z tym celem
-        if (targetId != null && targetId != "enemy_${enemy.id}") {
-            return false
-        }
-
-        // Prosta kolizja okrąg-prostokąt
-        val enemyRadius = 15f
-        val centerX = x
-        val centerY = y
-
-        val distance = Vector2.dst(centerX, centerY, enemy.x, enemy.y)
-        return distance <= enemyRadius
-    }
-
+    override val size: Float = 8f
     override var isToRemove: Boolean = false
 
-    // Oznaczanie strzały do usunięcia
-    override fun markForRemoval() {
-        shouldRemove = true
+    private val direction: Vector2 = Vector2(dirX, dirY).nor()
+    private val hitbox = Rectangle(x - size / 2, y - size / 2, size, size)
+
+    private val angle: Float
+        get() = Math.toDegrees(atan2(direction.y.toDouble(), direction.x.toDouble())).toFloat()
+
+    override fun update(delta: Float): Boolean {
+        if (isToRemove) return false
+
+        val move = speed * delta
+        x += direction.x * move
+        y += direction.y * move
+        hitbox.setPosition(x - size / 2, y - size / 2)
+
+        // doleciała?
+        val arrived = Vector2.dst(x, y, targetX, targetY) <= 4f
+        if (arrived) markForRemoval()
+
+        return !arrived
     }
 
-    // Implementacja metody render z interfejsu Skile
+    override fun checkCollision(player: Player): Boolean {
+        if (targetId != null && targetId != player.id) return false
+        return Vector2.dst(x, y, player.x, player.y) <= 15f
+    }
+
+    override fun checkCollision(enemy: EnemyClient): Boolean {
+        if (targetId != null && targetId != "enemy_${enemy.id}") return false
+        return Vector2.dst(x, y, enemy.x, enemy.y) <= 15f
+    }
+
+    override fun markForRemoval() {
+        isToRemove = true
+    }
+
     override fun render(shapeRenderer: ShapeRenderer) {
         shapeRenderer.color = color
-
-        // Zapisz bieżący stan transformacji
         shapeRenderer.identity()
-
-        // Przesuń do pozycji strzały
         shapeRenderer.translate(x, y, 0f)
-
-        // Obróć zgodnie z kątem strzały
         shapeRenderer.rotate(0f, 0f, 1f, angle)
-
-        // Narysuj strzałę jako prostokąt (ostrze + trzon)
-        // Trzon strzały
-        shapeRenderer.rectLine(-size, 0f, size, 0f, 2f)
-
-        // Ostrze strzały (trójkąt)
-        shapeRenderer.triangle(
-            size, 0f,
-            size - 4f, 3f,
-            size - 4f, -3f
-        )
-
-        // Przywróć poprzedni stan transformacji
+        shapeRenderer.rectLine(-size, 0f, size, 0f, 2f)          // trzon
+        shapeRenderer.triangle(size, 0f, size - 4f, 3f, size - 4f, -3f) // grot
         shapeRenderer.identity()
     }
 }

@@ -22,32 +22,57 @@ import pl.decodesoft.network.BaseMessageHandler
 
 // Handler obsługujący wiadomości związane z graczami
 class PlayerMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
-    override val supportedMessageTypes = setOf("JOIN", "MOVE", "MOVE_FAILED", "LEAVE", "XP_GAINED")
+    override val supportedMessageTypes = setOf(
+        "JOIN", "MOVE", "MOVE_FAILED", "LEAVE", "XP_GAINED", "LEAVE_WORLD", "LEVEL_UP"
+    )
 
     override fun handleMessage(parts: List<String>) {
-        when (parts[0]) {
+        when(parts[0]) {
             "JOIN" -> handleJoinMessage(parts)
             "MOVE" -> handleMoveMessage(parts)
             "MOVE_FAILED" -> handleMoveFailedMessage(parts)
             "LEAVE" -> handleLeaveMessage(parts)
             "XP_GAINED" -> handleXpGained(parts)
+            "LEAVE_WORLD" -> handleLeaveWorld(parts)
+            "LEVEL_UP" -> handleLevelUp(parts)
         }
     }
 
     private fun handleJoinMessage(parts: List<String>) {
-        if (parts.size >= 7) {
+        if (parts.size >= 12) { // ZMIEŃ z 10 na 12 (dodane currentMana i maxMana)
             val x = parts[1].toFloat()
             val y = parts[2].toFloat()
             val id = parts[3]
-            val playerUsername = if (parts.size >= 5) parts[4] else "Unknown"
-            val characterClass = if (parts.size >= 6) parts[5].toIntOrNull() ?: 2 else 2
-            val currentHealth = if (parts.size >= 7) parts[6].toIntOrNull() ?: 100 else 100
-            val maxHealth = if (parts.size >= 8) parts[7].toIntOrNull() ?: 100 else 100
-            val level = parts[8].toIntOrNull() ?: 1
-            val experience = parts[9].toIntOrNull() ?: 0
+            val playerUsername = parts[4]
+            val characterClass = parts[5].toIntOrNull() ?: 2
+            val currentHealth = parts[6].toIntOrNull() ?: 100
+            val maxHealth = parts[7].toIntOrNull() ?: 100
+            val currentMana = parts[8].toIntOrNull() ?: 100    // NOWE
+            val maxMana = parts[9].toIntOrNull() ?: 100        // NOWE
+            val level = parts[10].toIntOrNull() ?: 1           // PRZESUNIĘTE z [8]
+            val experience = parts[11].toIntOrNull() ?: 0      // PRZESUNIĘTE z [9]
 
-            // Używamy metody z MMOGame
-            game.addPlayer(id, x, y, playerUsername, characterClass, currentHealth, maxHealth, level, experience)
+            if (id == game.localPlayerId) {
+                // Lokalny gracz już istnieje, aktualizuj jego dane
+                game.localPlayer.x = x
+                game.localPlayer.y = y
+                game.localPlayer.currentHealth = currentHealth
+                game.localPlayer.maxHealth = maxHealth
+                game.localPlayer.currentMana = currentMana     // NOWE
+                game.localPlayer.maxMana = maxMana             // NOWE
+                game.localPlayer.level = level
+                game.localPlayer.experience = experience
+
+                // Ustaw kamerę na lokalnego gracza
+                game.camera.position.x = x
+                game.camera.position.y = y
+                game.camera.update()
+
+                println("Zaktualizowano dane lokalnego gracza na x=$x y=$y HP=$currentHealth/$maxHealth MP=$currentMana/$maxMana")
+            } else {
+                // Dodaj lub zaktualizuj pozostałych graczy na mapie
+                game.addPlayer(id, x, y, playerUsername, characterClass, currentHealth, maxHealth, currentMana, maxMana, level, experience)
+            }
         }
     }
 
@@ -93,6 +118,60 @@ class PlayerMessageHandler(game: MMOGame) : BaseMessageHandler(game) {
             player.level = currentLevel
 
             println("Gracz $playerId zdobył $gained XP (lvl: $currentLevel)")
+        }
+    }
+
+    private fun handleLevelUp(parts: List<String>) {
+        if (parts.size >= 8) { // Teraz oczekujemy 8 części wiadomości
+            val playerId = parts[1]
+            val newLevel = parts[2].toIntOrNull() ?: return
+            val newMaxHealth = parts[3].toIntOrNull() ?: return
+            val newCurrentHealth = parts[4].toIntOrNull() ?: return
+            val currentXp = parts[5].toIntOrNull() ?: return
+            val newPrimaryStat = parts[6].toIntOrNull() ?: return
+            val newStamina = parts[7].toIntOrNull() ?: return
+
+            val player = game.getPlayer(playerId) ?: return
+
+            // Aktualizuj wszystkie statystyki gracza
+            player.level = newLevel
+            player.maxHealth = newMaxHealth
+            player.currentHealth = newCurrentHealth
+            player.experience = currentXp
+            player.stamina = newStamina
+
+            // Aktualizuj odpowiedni stat w zależności od klasy
+            when (player.characterClass) {
+                0 -> player.agility = newPrimaryStat
+                1 -> player.spellPower = newPrimaryStat
+                2 -> player.strength = newPrimaryStat
+            }
+
+            // Jeśli to lokalny gracz
+            if (playerId == game.localPlayerId) {
+                game.localPlayer.level = newLevel
+                game.localPlayer.maxHealth = newMaxHealth
+                game.localPlayer.currentHealth = newCurrentHealth
+                game.localPlayer.experience = currentXp
+                game.localPlayer.stamina = newStamina
+
+                when (game.localPlayer.characterClass) {
+                    0 -> game.localPlayer.agility = newPrimaryStat
+                    1 -> game.localPlayer.spellPower = newPrimaryStat
+                    2 -> game.localPlayer.strength = newPrimaryStat
+                }
+
+                val statName = player.getPrimaryStatName()
+                game.showNotification("LEVEL UP! Poziom $newLevel! +1 $statName +1 Stamina", "levelup")
+            }
+        }
+    }
+
+    private fun handleLeaveWorld(parts: List<String>) {
+        if (parts.size >= 2) {
+            val playerId = parts[1]
+            // Obsługa opuszczenia świata
+            println("Gracz $playerId opuścił świat")
         }
     }
 }

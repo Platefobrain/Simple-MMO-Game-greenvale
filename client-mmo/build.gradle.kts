@@ -1,11 +1,12 @@
 plugins {
     kotlin("jvm") version "2.1.10"
     kotlin("plugin.serialization") version "2.1.20"
-    application                             // <<< dodajemy plugin application
+    application
+    id("com.github.johnrengelman.shadow") version "8.1.1"  // <<< Dodaj Shadow Plugin
 }
 
 group = "pl.decodesoft"
-version = "1.0-SNAPSHOT"
+version = "1.0"
 
 repositories {
     mavenCentral()
@@ -30,22 +31,16 @@ dependencies {
     implementation("at.favre.lib:bcrypt:0.9.0")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-
-    // Zależności LibGDX
-    implementation("com.badlogicgames.gdx:gdx:$gdxVersion")
-    implementation("com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion")
-    implementation("com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop")
 }
 
 // Konfiguracja zadań do uruchamiania klienta i serwera
 tasks.register<JavaExec>("runClient") {
     group = "application"
-    mainClass.set("pl.decodesoft.DesktopLauncher")
+    mainClass.set("pl.decodesoft.MMOGame\$Launcher")
     classpath = sourceSets["main"].runtimeClasspath
     standardInput = System.`in`
     workingDir = file("assets")
 
-    // Jeśli masz zasoby aplikacji, stworzy katalog assets jeśli nie istnieje
     doFirst {
         file("assets").mkdirs()
     }
@@ -62,9 +57,18 @@ tasks.test {
     useJUnitPlatform()
 }
 
-tasks.withType<Jar> {
+application {
+    mainClass.set("pl.decodesoft.MMOGame\$Launcher")
+}
+
+// Konfiguracja Shadow JAR
+tasks.shadowJar {
+    archiveBaseName.set("client-mmo")
+    archiveVersion.set("1.0")
+    archiveClassifier.set("all")
+
     manifest {
-        attributes["Main-Class"] = "pl.decodesoft.MMOGame.Launcher"
+        attributes["Main-Class"] = "pl.decodesoft.MMOGame\$Launcher"
     }
 }
 

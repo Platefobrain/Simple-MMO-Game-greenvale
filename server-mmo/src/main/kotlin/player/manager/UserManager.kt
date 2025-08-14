@@ -18,49 +18,95 @@
 package pl.decodesoft.player.manager
 
 import at.favre.lib.crypto.bcrypt.BCrypt
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.dao.id.UUIDTable
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.json.json
+import org.jetbrains.exposed.sql.transactions.transaction
+import pl.decodesoft.items.model.EquippedItems
 import pl.decodesoft.player.model.CharacterClass
 import pl.decodesoft.player.model.CharacterInfo
 import pl.decodesoft.player.model.User
-import java.io.File
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
+// Tabela użytkowników
+object Users : UUIDTable() {
+    val username = varchar("username", 50).uniqueIndex()
+    val passwordHash = varchar("password_hash", 60)
+    val characters = json<List<CharacterInfo>>("characters", Json.Default)
+    val selectedCharacterSlot = integer("selected_character_slot").nullable()
+}
+
 class UserManager {
-    private val usersFile = File("users.json")
     private val users = ConcurrentHashMap<String, User>()
-    private var lastSaveTime = System.currentTimeMillis()
-    private val saveInterval = 900000 // 15 minut między zapisami
-    private var pendingUpdates = false
+
+    // Mapa do szybkiego dostępu: characterId -> (user, character)
+    private val characterCache = mutableMapOf<String, Pair<User, CharacterInfo>>()
 
     init {
+        // Tworzenie tabeli jeśli nie istnieje
+        transaction {
+            SchemaUtils.create(Users)
+        }
+
         loadUsers()
+        refreshCharacterCache()
     }
 
     private fun loadUsers() {
-        if (usersFile.exists()) {
-            try {
-                val json = usersFile.readText()
-                val userList = Json.decodeFromString<List<User>>(json)
-                userList.forEach { user ->
-                    users[user.username.lowercase()] = user
-                }
-                println("Loaded ${users.size} users from ${usersFile.absolutePath}")
-            } catch (e: Exception) {
-                println("Error loading users: ${e.message}")
+        transaction {
+            Users.selectAll().forEach { row ->
+                val charactersFromDb = row[Users.characters]
+
+                // Migracja starych postaci bez pola equippedItems
+                val migratedCharacters = charactersFromDb.map { character ->
+                    if (character.equippedItems == EquippedItems()) {
+                        // Postać już ma pole equippedItems lub jest nowa
+                        character
+                    } else {
+                        // Dla bezpieczeństwa, upewnij się że pole istnieje
+                        character.copy(equippedItems = character.equippedItems)
+                    }
+                }.toMutableList()
+
+                val user = User(
+                    id = row[Users.id].value.toString(),
+                    username = row[Users.username],
+                    passwordHash = row[Users.passwordHash],
+                    characters = migratedCharacters,
+                    selectedCharacterSlot = row[Users.selectedCharacterSlot]
+                )
+                users[user.username.lowercase()] = user
             }
         }
+        println("Loaded ${users.size} users from PostgreSQL database")
+    }
+
+    // Odśwież cache po załadowaniu użytkowników
+    private fun refreshCharacterCache() {
+        characterCache.clear()
+        users.values.forEach { user ->
+            user.characters.forEach { character ->
+                characterCache[character.id] = Pair(user, character)
+            }
+        }
+        println("Refreshed character cache with ${characterCache.size} characters")
     }
 
     fun saveUsers() {
-        try {
-            val json = Json.encodeToString(users.values.toList())
-            usersFile.writeText(json)
-            println("Saved ${users.size} users to ${usersFile.absolutePath}")
-        } catch (e: Exception) {
-            println("Error saving users: ${e.message}")
+        transaction {
+            users.values.forEach { user ->
+                Users.upsert {
+                    it[id] = UUID.fromString(user.id)
+                    it[username] = user.username
+                    it[passwordHash] = user.passwordHash
+                    it[characters] = user.characters
+                    it[selectedCharacterSlot] = user.selectedCharacterSlot
+                }
+            }
         }
+        println("Saved ${users.size} users to PostgreSQL database")
     }
 
     fun registerUser(username: String, password: String): Result<User> {
@@ -85,8 +131,18 @@ class UserManager {
         val userId = UUID.randomUUID().toString()
         val user = User(userId, username, passwordHash)
 
+        // Zapisz do bazy danych
+        transaction {
+            Users.insert {
+                it[id] = UUID.fromString(userId)
+                it[Users.username] = username
+                it[Users.passwordHash] = passwordHash
+                it[characters] = emptyList()
+                it[selectedCharacterSlot] = null
+            }
+        }
+
         users[normalizedUsername] = user
-        saveUsers()
 
         return Result.success(user)
     }
@@ -113,15 +169,17 @@ class UserManager {
         val normalizedUsername = updatedUser.username.lowercase()
         if (users.containsKey(normalizedUsername)) {
             users[normalizedUsername] = updatedUser
-            pendingUpdates = true
 
-            // Zapisuj tylko co jakiś czas, nie po każdej aktualizacji
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastSaveTime > saveInterval) {
-                saveUsers()
-                lastSaveTime = currentTime
-                pendingUpdates = false
+            // Zapisz do bazy danych
+            transaction {
+                Users.update({ Users.id eq UUID.fromString(updatedUser.id) }) {
+                    it[characters] = updatedUser.characters
+                    it[selectedCharacterSlot] = updatedUser.selectedCharacterSlot
+                }
             }
+
+            // Odśwież cache po aktualizacji
+            refreshCharacterCache()
         }
     }
 
@@ -151,13 +209,12 @@ class UserManager {
             .getOrElse(characterClassOrdinal) { CharacterClass.WARRIOR }
 
         // Ustal maksymalne zdrowie dla klasy
-        val maxHealth = when (characterClass) {
-            CharacterClass.WARRIOR -> 150
-            CharacterClass.ARCHER -> 100
-            CharacterClass.MAGE -> 80
-        }
+        val maxHealth = characterClass.baseHealth
 
-        // Tworzenie nowej postaci
+        // Pobierz domyślną pozycję spawnu
+        val defaultSpawn = SpawnManager.getDefaultSpawn()
+
+        // Tworzenie nowej postaci z pustym ekwipunkiem
         val characterId = UUID.randomUUID().toString()
         val newCharacter = CharacterInfo(
             id = characterId,
@@ -166,7 +223,10 @@ class UserManager {
             maxHealth = maxHealth,
             currentHealth = maxHealth,
             level = 1,
-            experience = 0
+            experience = 0,
+            lastX = defaultSpawn.first,  // Ustaw domyślną pozycję X
+            lastY = defaultSpawn.second, // Ustaw domyślną pozycję Y
+            equippedItems = EquippedItems() // Pusty ekwipunek na start
         )
 
         // Dodaj postać do konta użytkownika

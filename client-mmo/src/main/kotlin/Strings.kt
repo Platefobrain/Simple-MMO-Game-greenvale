@@ -18,6 +18,10 @@
 package pl.decodesoft
 
 object Strings {
+
+    // Konfiguracja serwera
+    const val IP_ADDRESS = "192.109.240.239:8081" // Adres IP serwera 192.109.240.239
+
     // Character classes
     const val CLASS_ARCHER = "Łucznik"
     const val CLASS_MAGE = "Mag"
@@ -31,7 +35,7 @@ object Strings {
     // UI Elements
     const val PLAYERS_ONLINE = "Gracze online"
     const val LOGGED_AS = "Zalogowany jako"
-    const val LEVEL = "Poziom"
+    const val LEVEL = "Lv."
     const val SELECTED_PLAYER = "Zaznaczony gracz"
 
     // Character creation
@@ -52,7 +56,7 @@ object Strings {
     const val HELP_WARRIOR_CHARGE = "Q - Szarża w kierunku zaznaczonego celu lub kursora"
 
     // Enemy types
-    const val ENEMY_SHEEP = "OwcaTwoja tata"
+    const val ENEMY_SHEEP = "Mała Owca"
     const val ENEMY_WOLF = "Wilk"
     const val ENEMY_BEAR = "Niedźwiedź"
 

@@ -18,23 +18,38 @@
 package pl.decodesoft.player
 
 import com.badlogic.gdx.graphics.Color
+import pl.decodesoft.ui.character.ClientItem
 import kotlin.math.sqrt
 
 data class Player(
-    var x: Float,
-    var y: Float,
+    var x: Float = 0f,
+    var y: Float = 0f,
     val id: String,
-    val color: Color,
     val username: String,
-    val characterClass: Int = 2, // 0-łucznik, 1-mag, 2-wojownik
+    val characterClass: Int = 0, // 0-łucznik, 1-mag, 2-wojownik
     var isSelected: Boolean = false,
     var maxHealth: Int = 100,
     var currentHealth: Int = 100,
+    var maxMana: Int = 100,
+    var currentMana: Int = 100,
     var level: Int = 1,
-    var experience: Int = 0
+    var experience: Int = 0,
+    var spellPower: Int = 0,     // Bazowa moc magiczna dla Maga
+    var strength: Int = 0,       // Bazowa siła dla Warriora
+    var agility: Int = 0,        // Bazowa zręczność dla Archera
+    var stamina: Int = 0,        // Bazowa stamina
+    var mana: Int = 0,           // Bazowa mana
+
+    // === NOWE POLA DLA ITEMÓW ===
+    var equippedHelmet: ClientItem? = null,    // Założony hełm
+    var equippedArmor: ClientItem? = null,     // Założona zbroja
+    var equippedPants: ClientItem? = null,     // Założone spodnie
+    var equippedBoots: ClientItem? = null,     // Założone buty
+    var equippedWeapon: ClientItem? = null     // Założona broń
+
 ) {
     // Zmienne do obsługi ruchu - uproszczone
-    private var isMoving: Boolean = false
+    var movingState: Boolean = false
     private var moveSpeed: Float = 120f
 
     // Zmienne do interpolacji (dla płynnego ruchu gracza)
@@ -54,13 +69,175 @@ data class Player(
         }
     }
 
-    fun getClassName(): String {
+    // === NOWE METODY - KALKULACJA STATYSTYK Z ITEMAMI ===
+
+    // Zwraca łączną siłę (bazowa + bonusy z itemów)
+    fun getTotalStrength(): Int {
+        val itemBonus = getAllEquippedItems().sumOf { it.strengthBonus }
+        return strength + itemBonus
+    }
+
+    // Zwraca łączną zręczność (bazowa + bonusy z itemów)
+    fun getTotalAgility(): Int {
+        val itemBonus = getAllEquippedItems().sumOf { it.agilityBonus }
+        return agility + itemBonus
+    }
+
+    // Zwraca łączną moc magiczną (bazowa + bonusy z itemów)
+    fun getTotalSpellPower(): Int {
+        val itemBonus = getAllEquippedItems().sumOf { it.spellPowerBonus }
+        return spellPower + itemBonus
+    }
+
+    // Zwraca łączną wytrzymałość (bazowa + bonusy z itemów)
+    fun getTotalStamina(): Int {
+        val itemBonus = getAllEquippedItems().sumOf { it.staminaBonus }
+        return stamina + itemBonus
+    }
+
+    // Zwraca łączną wytrzymałość (bazowa + bonusy z itemów)
+    fun getTotalMana(): Int {
+        val itemBonus = getAllEquippedItems().sumOf { it.manaBonus }
+        return mana + itemBonus
+    }
+
+    // Funkcja do pobierania nazwy głównego statu
+    fun getPrimaryStatName(): String {
         return when (characterClass) {
-            0 -> "Łucznik"
-            1 -> "Mag"
-            else -> "Wojownik"
+            0 -> "Agility"
+            1 -> "Spell Power"
+            2 -> "Strength"
+            else -> "Unknown"
         }
     }
+
+    // Zwraca główną statystykę klasy uwzględniając bonusy z itemów
+    fun getPrimaryStat(): Int {
+        return when (characterClass) {
+            0 -> getTotalAgility()      // Łucznik używa zręczności
+            1 -> getTotalSpellPower()   // Mag używa mocy magicznej
+            2 -> getTotalStrength()     // Wojownik używa siły
+            else -> 0
+        }
+    }
+
+    // === METODY ZARZĄDZANIA ITEMAMI ===
+
+    // Ustawia item w odpowiednim slocie
+    fun equipItem(item: ClientItem): ClientItem? {
+        val previousItem = when (item.type) {
+            "HELMET" -> {
+                val old = equippedHelmet
+                equippedHelmet = item
+                old
+            }
+            "ARMOR" -> {
+                val old = equippedArmor
+                equippedArmor = item
+                old
+            }
+            "PANTS" -> {
+                val old = equippedPants
+                equippedPants = item
+                old
+            }
+            "BOOTS" -> {
+                val old = equippedBoots
+                equippedBoots = item
+                old
+            }
+            "WEAPON" -> {
+                val old = equippedWeapon
+                equippedWeapon = item
+                old
+            }
+            else -> null
+        }
+        return previousItem
+    }
+
+    // Zdejmuje item z odpowiedniego slotu
+    fun unequipItem(itemType: String): ClientItem? {
+        return when (itemType) {
+            "HELMET" -> {
+                val old = equippedHelmet
+                equippedHelmet = null
+                old
+            }
+            "ARMOR" -> {
+                val old = equippedArmor
+                equippedArmor = null
+                old
+            }
+            "PANTS" -> {
+                val old = equippedPants
+                equippedPants = null
+                old
+            }
+            "BOOTS" -> {
+                val old = equippedBoots
+                equippedBoots = null
+                old
+            }
+            "WEAPON" -> {
+                val old = equippedWeapon
+                equippedWeapon = null
+                old
+            }
+            else -> null
+        }
+    }
+
+    // Pobiera item z danego slotu
+    fun getEquippedItem(itemType: String): ClientItem? {
+        return when (itemType) {
+            "HELMET" -> equippedHelmet
+            "ARMOR" -> equippedArmor
+            "PANTS" -> equippedPants
+            "BOOTS" -> equippedBoots
+            "WEAPON" -> equippedWeapon
+            else -> null
+        }
+    }
+
+    // Zwraca listę wszystkich założonych itemów
+    fun getAllEquippedItems(): List<ClientItem> {
+        return listOfNotNull(equippedHelmet, equippedArmor, equippedPants, equippedBoots, equippedWeapon)
+    }
+
+    // Sprawdza czy gracz ma założony jakikolwiek item
+    fun hasAnyEquippedItems(): Boolean {
+        return equippedHelmet != null || equippedArmor != null ||
+                equippedPants != null || equippedBoots != null || equippedWeapon != null
+    }
+
+    // Oblicza łączne bonusy ze wszystkich itemów
+    fun getTotalItemBonuses(): Array<Int> {
+        var totalStr = 0
+        var totalAgi = 0
+        var totalSP = 0
+        var totalSta = 0
+
+        getAllEquippedItems().forEach { item ->
+            totalStr += item.strengthBonus
+            totalAgi += item.agilityBonus
+            totalSP += item.spellPowerBonus
+            totalSta += item.staminaBonus
+        }
+
+        return arrayOf(totalStr, totalAgi, totalSP, totalSta)
+    }
+
+    // Czyści cały ekwipunek gracza
+    fun clearAllEquipment() {
+        equippedHelmet = null
+        equippedArmor = null
+        equippedPants = null
+        equippedBoots = null
+        equippedWeapon = null
+    }
+
+    // === METODY RUCHU (BEZ ZMIAN) ===
 
     // Uproszczona metoda do ustawiania docelowej pozycji ruchu
     fun setMoveTarget(newTargetX: Float, newTargetY: Float) {
@@ -73,13 +250,13 @@ data class Player(
         targetY = newTargetY
 
         // Rozpocznij ruch
-        isMoving = true
+        movingState = true
         interpolationProgress = 0f
     }
 
     // Metoda do aktualizacji pozycji gracza (interpolacja bez predykcji)
     fun updatePosition(delta: Float) {
-        if (!isMoving) return
+        if (!movingState) return
 
         // Zwiększ postęp interpolacji
         interpolationProgress += delta * 10f // Mnożnik wpływa na płynność
@@ -91,13 +268,13 @@ data class Player(
 
         // Jeśli osiągnęliśmy cel, zatrzymaj interpolację
         if (interpolationProgress >= 1f) {
-            isMoving = false
+            movingState = false
         }
     }
 
     // Metoda do aktualizacji pozycji lokalnego gracza (predykcja po stronie klienta)
     fun updateLocalPosition(delta: Float) {
-        if (!isMoving) return
+        if (!movingState) return
 
         // Oblicz odległość do celu
         val distX = targetX - x
@@ -108,7 +285,7 @@ data class Player(
 
         // Używanie kwadratu odległości zamiast samej odległości (unikamy kosztownego sqrt)
         if (distSquared < 25f) { // 5^2 = 25
-            isMoving = false
+            movingState = false
             return
         }
 
@@ -133,7 +310,7 @@ data class Player(
     // Metoda do bezpośredniego ustawienia pozycji otrzymanej z serwera
     fun setServerPosition(serverX: Float, serverY: Float) {
         // Jeśli nie jesteśmy w ruchu, od razu ustaw pozycję
-        if (!isMoving) {
+        if (!movingState) {
             x = serverX
             y = serverY
             previousX = serverX

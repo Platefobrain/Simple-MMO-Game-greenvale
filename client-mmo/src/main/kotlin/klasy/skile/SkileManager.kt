@@ -17,26 +17,16 @@
 
 package pl.decodesoft.klasy.skile
 
-import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
-import io.ktor.websocket.DefaultWebSocketSession
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import pl.decodesoft.player.Player
+import com.badlogic.gdx.math.Vector2
+import pl.decodesoft.enemy.EnemyClient
 import pl.decodesoft.klasy.projectiles.Arrow
 import pl.decodesoft.klasy.projectiles.Fireball
 import pl.decodesoft.klasy.projectiles.Sword
-import io.ktor.websocket.Frame
-import pl.decodesoft.enemy.EnemyClient
 
-/**
- * Klasa zarządzająca wszystkimi umiejętnościami (pociskami) w grze
- */
+// Klasa zarządzająca wszystkimi umiejętnościami (pociskami) w grze
 class SkileManager(
     private val localPlayerId: String,
-    private val players: Map<String, Player>,
-    private val networkScope: CoroutineScope,
-    private val session: () -> DefaultWebSocketSession?,
     private val enemies: Map<String, EnemyClient> = emptyMap()
 ) {
     // Lista wszystkich aktywnych umiejętności
@@ -52,37 +42,26 @@ class SkileManager(
 
     // Aktualizacja wszystkich umiejętności
     fun update(delta: Float) {
-        val skillsToRemove = mutableListOf<Skile>()
+        val toRemove = mutableListOf<Skile>()
 
         activeSkills.forEach { skill ->
-            val isActive = skill.update(delta)
-            if (!isActive) {
-                skillsToRemove.add(skill)
-            } else {
-                // Sprawdź kolizje z graczami
-                players.values.forEach { player ->
-                    // Pomijamy kolizje z casterem
-                    if (player.id != skill.casterId && player.isSelected && skill.checkCollision(player)) {
-                        skillsToRemove.add(skill)
-                        // Wysyłanie informacji o trafieniu
-                        if (skill.casterId == localPlayerId) {
-                            sendHitMessage(player.id, skill)
-                        }
-                    }
-                }
+            val alive = skill.update(delta)
+            if (!alive) toRemove.add(skill)
+            else {
 
-                // Sprawdź kolizje z przeciwnikami
+                // kolizje z przeciwnikami
                 enemies.values.forEach { enemy ->
-                    if (enemy.isSelected && skill.checkCollision(enemy) && !isEnemyHitBySkill(enemy.id, skill.id)) {
-                        skillsToRemove.add(skill)
-                        // Nie musimy wysyłać informacji o trafieniu, to robi serwer
+                    if (enemy.isSelected &&
+                        skill.checkCollision(enemy) &&
+                        !isEnemyHitBySkill(enemy.id, skill.id)
+                    ) {
+                        handleEnemyHit(enemy.id, skill.casterId)
                     }
                 }
             }
         }
 
-        // Usuń umiejętności, które wyszły poza zasięg lub trafiły w cel
-        activeSkills.removeAll(skillsToRemove)
+        activeSkills.removeAll(toRemove)
     }
 
     // Sprawdź czy dany przeciwnik został już trafiony przez konkretną umiejętność
@@ -92,29 +71,7 @@ class SkileManager(
 
     // Renderowanie wszystkich umiejętności
     fun render(shapeRenderer: ShapeRenderer) {
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled)
-        activeSkills.forEach { skill ->
-            skill.render(shapeRenderer)
-        }
-        shapeRenderer.end()
-    }
-
-    // Wysyłanie wiadomości o trafieniu
-    private fun sendHitMessage(targetId: String, skill: Skile) {
-        networkScope.launch {
-            try {
-                val hitType = when (skill) {
-                    is Arrow -> "ARROW"
-                    is Fireball -> "FIREBALL"
-                    is Sword -> "SWORD"
-                    else -> "UNKNOWN"
-                }
-                val message = "HIT|$targetId|${skill.casterId}|$hitType"
-                session()?.send(Frame.Text(message))
-            } catch (e: Exception) {
-                Gdx.app.error("SkileManager", "Błąd wysyłania informacji o trafieniu: ${e.message}")
-            }
-        }
+        activeSkills.forEach { it.render(shapeRenderer) }
     }
 
     // Obsługa trafiania w przeciwników
@@ -135,55 +92,36 @@ class SkileManager(
     }
 
     fun handleSkillMessage(msgType: String, parts: List<String>) {
+        // Gdx.app.log("NET‑DEBUG", "msg=$msgType parts=$parts")
         when (msgType) {
-            "RANGED_ATTACK" -> {
-                if (parts.size >= 7) {
-                    val startX = parts[1].toFloat()
-                    val startY = parts[2].toFloat()
-                    val dirX = parts[3].toFloat()
-                    val dirY = parts[4].toFloat()
+            "RANGED_ATTACK", "SPELL_ATTACK", "MELEE_ATTACK" -> {
+                if (parts.size >= 6) {
+                    val startX   = parts[1].toFloat()
+                    val startY   = parts[2].toFloat()
+                    val targetX  = parts[3].toFloat()
+                    val targetY  = parts[4].toFloat()
                     val casterId = parts[5]
-                    val targetId = parts[6]
+                    val targetId = parts.getOrNull(6)
 
-                    // Nie tworzymy strzały dla lokalnego gracza (już została utworzona)
                     if (casterId != localPlayerId) {
-                        addSkill(Arrow(startX, startY, dirX, dirY, casterId))
+                        val dir = Vector2(targetX - startX, targetY - startY).nor()
+                        when (msgType) {
+                            "RANGED_ATTACK" -> addSkill(
+                                Arrow(startX, startY, dir.x, dir.y,
+                                    casterId, targetId, targetX, targetY)
+                            )
+                            "SPELL_ATTACK"  -> addSkill(
+                                Fireball(startX, startY, dir.x, dir.y,
+                                    casterId, targetId, targetX, targetY)
+                            )
+                            "MELEE_ATTACK"  -> addSkill(
+                                Sword(startX, startY, dir.x, dir.y,
+                                    casterId, targetId, targetX, targetY)
+                            )
+                        }
                     }
                 }
             }
-
-            "SPELL_ATTACK" -> {
-                if (parts.size >= 7) {
-                    val startX = parts[1].toFloat()
-                    val startY = parts[2].toFloat()
-                    val dirX = parts[3].toFloat()
-                    val dirY = parts[4].toFloat()
-                    val casterId = parts[5]
-                    val targetId = parts[6]
-
-                    // Nie tworzymy kuli ognia dla lokalnego gracza
-                    if (casterId != localPlayerId) {
-                        addSkill(Fireball(startX, startY, dirX, dirY, casterId))
-                    }
-                }
-            }
-
-            "MELEE_ATTACK" -> {
-                if (parts.size >= 7) {
-                    val startX = parts[1].toFloat()
-                    val startY = parts[2].toFloat()
-                    val dirX = parts[3].toFloat()
-                    val dirY = parts[4].toFloat()
-                    val casterId = parts[5]
-                    val targetId = parts[6]
-
-                    // Nie tworzymy ataku mieczem dla lokalnego gracza
-                    if (casterId != localPlayerId) {
-                        addSkill(Sword(startX, startY, dirX, dirY, casterId))
-                    }
-                }
-            }
-
             // Obsługa wiadomości o trafieniu przeciwnika
             "HIT", "HIT_DETAILED" -> {
                 if (parts.size >= 3 && parts[1].startsWith("enemy_")) {
