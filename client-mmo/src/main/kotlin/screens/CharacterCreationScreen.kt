@@ -1,20 +1,3 @@
-/*
- * This file is part of [GreenVale]
- *
- * [GreenVale] is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * [GreenVale] is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with [GreenVale].  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.decodesoft.screens
 
 import com.badlogic.gdx.Gdx
@@ -23,6 +6,7 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.graphics.Texture
+import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
@@ -30,6 +14,7 @@ import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.*
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
+import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.viewport.FitViewport
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -42,15 +27,18 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import pl.decodesoft.MMOGame
-import pl.decodesoft.Strings
 import pl.decodesoft.Strings.IP_ADDRESS
+import pl.decodesoft.player.skin.Direction
+import pl.decodesoft.player.skin.PlayerSkinManager
 
 @Serializable
 data class CharacterCreateRequest(
     val userId: String,
     val characterClass: Int,
     val nickname: String,
-    val slotIndex: Int
+    val slotIndex: Int,
+    val faction: String,
+    val race: String
 )
 
 @Serializable
@@ -70,16 +58,29 @@ class CharacterCreationScreen(
     private lateinit var camera: OrthographicCamera
     private lateinit var viewport: FitViewport
     private lateinit var font: BitmapFont
+    private lateinit var smallFont: BitmapFont
     private lateinit var skin: Skin
+    private var skinPreviewBatch: SpriteBatch? = null
+    private var skinManager: PlayerSkinManager? = null
 
-    // Tekstury postaci
     private lateinit var archerTexture: Texture
     private lateinit var mageTexture: Texture
     private lateinit var warriorTexture: Texture
+    private lateinit var archerLogoTexture: Texture
+    private lateinit var mageLogoTexture: Texture
+    private lateinit var warriorLogoTexture: Texture
+    private lateinit var goblinTexture: Texture
+    private lateinit var humanTexture: Texture
+    private lateinit var undeadTexture: Texture
+    private lateinit var elfTexture: Texture
 
-    private var selectedClass = 0 // Domyślnie wojownik (0-łucznik, 1-mag, 2-wojownik)
+    private var selectedClass = 0
+    private var selectedFaction = "NONE"
+    private var selectedRace = "NONE"
     private var nicknameField: TextField? = null
-    private var playerNickname: String = username // Domyślnie ustawione na username
+    private var playerNickname: String = username
+
+    private lateinit var characterImageContainer: Container<Actor>
 
     private var creationScope = CoroutineScope(Dispatchers.IO)
     private val httpClient = HttpClient(CIO) {
@@ -93,21 +94,40 @@ class CharacterCreationScreen(
         viewport = FitViewport(Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat(), camera)
         batch = SpriteBatch()
 
-        // Wczytaj czcionkę
+        skinPreviewBatch = SpriteBatch()
+        skinManager = PlayerSkinManager()
+
         val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/ChakraPetch-SemiBold.ttf"))
+
         val parameter = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
-            size = 24
+            size = 32
             characters = FreeTypeFontGenerator.DEFAULT_CHARS + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
             color = Color.WHITE
         }
         font = generator.generateFont(parameter)
+
+        val smallParameter = FreeTypeFontGenerator.FreeTypeFontParameter().apply {
+            size = 20
+            characters = FreeTypeFontGenerator.DEFAULT_CHARS + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
+            color = Color.WHITE
+        }
+        smallFont = generator.generateFont(smallParameter)
+
         generator.dispose()
 
-        // Wczytaj tekstury postaci
         try {
-            archerTexture = Texture(Gdx.files.internal("textures/archer.png"))
-            mageTexture = Texture(Gdx.files.internal("textures/mage.png"))
-            warriorTexture = Texture(Gdx.files.internal("textures/warrior.png"))
+            archerTexture = Texture(Gdx.files.internal("textures/archer/archer.png"))
+            mageTexture = Texture(Gdx.files.internal("textures/mage/mage.png"))
+            warriorTexture = Texture(Gdx.files.internal("textures/warrior/warrior.png"))
+
+            archerLogoTexture = Texture(Gdx.files.internal("textures/archer/archer_logo.png"))
+            mageLogoTexture = Texture(Gdx.files.internal("textures/mage/mage_logo.png"))
+            warriorLogoTexture = Texture(Gdx.files.internal("textures/warrior/warrior_logo.png"))
+
+            goblinTexture = Texture(Gdx.files.internal("textures/races/goblin.png"))
+            humanTexture = Texture(Gdx.files.internal("textures/races/human.png"))
+            undeadTexture = Texture(Gdx.files.internal("textures/races/undead.png"))
+            elfTexture = Texture(Gdx.files.internal("textures/races/elf.png"))
         } catch (e: Exception) {
             Gdx.app.error("CharacterCreation", "Nie można załadować tekstur: ${e.message}")
         }
@@ -115,9 +135,16 @@ class CharacterCreationScreen(
         stage = Stage(viewport, batch)
         Gdx.input.inputProcessor = stage
 
-        // Tworzymy prosty skin na potrzeby interfejsu
         skin = runCatching {
-            Skin(Gdx.files.internal("assets/uiskin.json"))
+            Skin(Gdx.files.internal("assets/uiskin.json")).also {
+                if (!it.has("title", Label.LabelStyle::class.java)) {
+                    val titleStyle = Label.LabelStyle().apply {
+                        font = this@CharacterCreationScreen.font
+                        fontColor = Color(1f, 0.9f, 0.6f, 1f)
+                    }
+                    it.add("title", titleStyle)
+                }
+            }
         }.getOrElse {
             createBasicSkin()
         }
@@ -127,26 +154,34 @@ class CharacterCreationScreen(
 
     private fun createBasicSkin(): Skin {
         val skin = Skin()
-        skin.add("default", font)
+
+        skin.add("default-font", font)
+        skin.add("small-font", smallFont)
 
         val textButtonStyle = TextButton.TextButtonStyle().apply {
-            font = this@CharacterCreationScreen.font
+            font = smallFont
             fontColor = Color.WHITE
             downFontColor = Color.LIGHT_GRAY
-            up = skin.newDrawable("white", Color.DARK_GRAY)
-            down = skin.newDrawable("white", Color.GRAY)
-            over = skin.newDrawable("white", Color(0.4f, 0.4f, 0.5f, 1f))
+            up = skin.newDrawable("white", Color(0.2f, 0.2f, 0.2f, 0.8f))
+            down = skin.newDrawable("white", Color(0.3f, 0.3f, 0.3f, 0.9f))
+            over = skin.newDrawable("white", Color(0.4f, 0.4f, 0.4f, 0.9f))
         }
         skin.add("default", textButtonStyle)
 
         val labelStyle = Label.LabelStyle().apply {
-            font = this@CharacterCreationScreen.font
+            font = smallFont
             fontColor = Color.WHITE
         }
         skin.add("default", labelStyle)
 
-        val textFieldStyle = TextField.TextFieldStyle().apply {
+        val titleStyle = Label.LabelStyle().apply {
             font = this@CharacterCreationScreen.font
+            fontColor = Color(1f, 0.9f, 0.6f, 1f)
+        }
+        skin.add("title", titleStyle)
+
+        val textFieldStyle = TextField.TextFieldStyle().apply {
+            font = smallFont
             fontColor = Color.WHITE
             background = skin.newDrawable("white", Color(0.2f, 0.2f, 0.2f, 1f))
             cursor = skin.newDrawable("white", Color.WHITE)
@@ -158,138 +193,393 @@ class CharacterCreationScreen(
     }
 
     private fun createUI() {
-        val table = Table()
-        table.setFillParent(true)
+        stage.clear()
 
-        val titleLabel = Label("Stwórz nową postać", skin)
-        titleLabel.setFontScale(1.5f)
+        val mainTable = Table()
+        mainTable.setFillParent(true)
+        mainTable.background = skin.newDrawable("white", Color(0.1176f, 0.1176f, 0.1176f, 1f))
 
-        // Dodaj etykietę i pole tekstowe na nickname
+        // LEWY PANEL - Opis wybranej klasy
+        val leftPanel = Table()
+        leftPanel.background = skin.newDrawable("white", Color(0.149f, 0.149f, 0.149f, 1f))
+        leftPanel.align(Align.top)
+
+        val classInfoTable = Table()
+        classInfoTable.background = skin.newDrawable("white", Color(0.1176f, 0.1176f, 0.1176f, 1f))
+        classInfoTable.pad(20f)
+        classInfoTable.align(Align.top)
+
+        val classNameLabel = Label(getClassName(selectedClass), skin, "title")
+        classNameLabel.setFontScale(1.0f)
+        classNameLabel.color = getClassColor(selectedClass)
+        classInfoTable.add(classNameLabel).pad(10f).top()
+        classInfoTable.row()
+
+        val classDesc = Label(getClassDescription(selectedClass), skin)
+        classDesc.wrap = true
+        classDesc.setAlignment(Align.topLeft)
+        classInfoTable.add(classDesc).width(260f).expandY().fillY().pad(10f).top()
+
+        leftPanel.add(classInfoTable).expand().fill().pad(10f, 10f, 10f, 10f)
+
+        // ŚRODKOWY PANEL - Podgląd postaci
+        val centerPanel = Table()
+        centerPanel.align(Align.center)
+
+        characterImageContainer = Container<Actor>()
+        updateCharacterImage()
+        centerPanel.add(characterImageContainer).size(400f, 400f).center()
+        centerPanel.row()
+
+        // Pole nicku
+        val nicknameTable = Table()
         val nicknameLabel = Label("Nazwa postaci:", skin)
-        nicknameField = TextField(username, skin) // Domyślnie ustawione na username
+        nicknameField = TextField(username, skin)
         nicknameField?.maxLength = 20
-
-        // Listener do obsługi zmian w nicku
         nicknameField?.addListener(object : ChangeListener() {
             override fun changed(event: ChangeEvent?, actor: Actor?) {
                 playerNickname = nicknameField?.text ?: username
             }
         })
 
-        val loggedAsLabel = Label("${Strings.LOGGED_AS}: $username (Slot ${slotIndex + 1})", skin)
+        nicknameTable.add(nicknameLabel).padRight(10f)
+        nicknameTable.add(nicknameField).width(200f)
+        centerPanel.add(nicknameTable).pad(20f)
+        centerPanel.row()
 
-        // Tworzenie tabeli z klasami
-        val classesTable = Table()
-
-        // Tworzenie paneli klas
-        val archerTable = createClassPanel("Łucznik", "Specjalizuje się w atakach dystansowych\ni wysokich obrażeniach pojedynczego celu.", 0)
-        val mageTable = createClassPanel("Mag", "Włada potężną magią obszarową\ni potrafi kontrolować pole bitwy.", 1)
-        val warriorTable = createClassPanel("Wojownik", "Wytrzymały czempion walczący wręcz,\nidealny do obrony sojuszników.", 2)
-
-        // Dodawanie klas do tabeli
-        classesTable.add(archerTable).pad(10f)
-        classesTable.add(mageTable).pad(10f)
-        classesTable.add(warriorTable).pad(10f)
-
-        // Przycisk zatwierdzający
-        val confirmButton = TextButton("Stwórz postać", skin)
-        confirmButton.addListener(object : ChangeListener() {
+        // Przyciski akcji
+        val createButton = TextButton("Stwórz postać", skin)
+        createButton.addListener(object : ChangeListener() {
             override fun changed(event: ChangeEvent?, actor: Actor?) {
                 createCharacter()
             }
         })
+        centerPanel.add(createButton).width(300f).height(60f).pad(10f)
 
-        // Przycisk anulowania
-        val cancelButton = TextButton("Anuluj", skin)
-        cancelButton.addListener(object : ChangeListener() {
+        // PRAWY PANEL - Wybór rasy i klasy
+        val rightPanel = Table()
+        rightPanel.background = skin.newDrawable("white", Color(0.149f, 0.149f, 0.149f, 1f))
+        rightPanel.align(Align.top)
+
+        // === SEKCJA WYBORU RASY ===
+        val raceTitle = Label("Wybór rasy", skin, "title")
+        raceTitle.setFontScale(0.8f)
+        rightPanel.add(raceTitle).pad(20f, 10f, 15f, 10f).top().colspan(2)
+        rightPanel.row()
+
+        // Tabela z dwoma kolumnami dla ras
+        val raceTable = Table()
+        raceTable.background = skin.newDrawable("white", Color(0.1176f, 0.1176f, 0.1176f, 1f))
+        raceTable.pad(10f)
+
+        // Lewa kolumna - Zakon (Człowiek i Elf)
+        val zakonColumn = Table()
+        val zakonLabel = Label("Zakon", skin)
+        zakonLabel.color = Color(0.2f, 0.4f, 0.8f, 1f)
+        zakonColumn.add(zakonLabel).pad(5f)
+        zakonColumn.row()
+
+        val humanRaceItem = createRaceItem(humanTexture, "HUMAN", "ZAKON")
+        zakonColumn.add(humanRaceItem).size(100f).pad(5f)
+        zakonColumn.row()
+
+        val elfRaceItem = createRaceItem(elfTexture, "ELF", "ZAKON")
+        zakonColumn.add(elfRaceItem).size(100f).pad(5f)
+
+        // Prawa kolumna - Wataha (Goblin i Undead)
+        val watahaColumn = Table()
+        val watahaLabel = Label("Wataha", skin)
+        watahaLabel.color = Color(0.8f, 0.3f, 0.1f, 1f)
+        watahaColumn.add(watahaLabel).pad(5f)
+        watahaColumn.row()
+
+        val goblinRaceItem = createRaceItem(goblinTexture, "GOBLIN", "WATAHA")
+        watahaColumn.add(goblinRaceItem).size(100f).pad(5f)
+        watahaColumn.row()
+
+        val undeadRaceItem = createRaceItem(undeadTexture, "UNDEAD", "WATAHA")
+        watahaColumn.add(undeadRaceItem).size(100f).pad(5f)
+
+        raceTable.add(zakonColumn).pad(10f)
+        raceTable.add(watahaColumn).pad(10f)
+
+        rightPanel.add(raceTable).pad(10f).colspan(2)
+        rightPanel.row()
+
+        val separator1 = Table()
+        separator1.background = skin.newDrawable("white", Color(0.3f, 0.3f, 0.3f, 1f))
+        rightPanel.add(separator1).height(2f).width(280f).pad(15f, 0f, 15f, 0f).colspan(2)
+        rightPanel.row()
+
+        // === SEKCJA WYBORU KLASY ===
+        val classTitle = Label("Wybierz klasę", skin, "title")
+        classTitle.setFontScale(0.8f)
+        rightPanel.add(classTitle).pad(10f, 10f, 15f, 10f).top().colspan(2)
+        rightPanel.row()
+
+        val classListTable = Table()
+        classListTable.background = skin.newDrawable("white", Color(0.1176f, 0.1176f, 0.1176f, 1f))
+        classListTable.pad(10f)
+        classListTable.align(Align.top)
+
+        val archerLogo = createClassLogoItem(0, archerLogoTexture)
+        val mageLogo = createClassLogoItem(1, mageLogoTexture)
+        val warriorLogo = createClassLogoItem(2, warriorLogoTexture)
+
+        classListTable.add(archerLogo).size(90f).pad(5f)
+        classListTable.add(mageLogo).size(90f).pad(5f)
+        classListTable.add(warriorLogo).size(90f).pad(5f)
+        classListTable.row()
+
+        rightPanel.add(classListTable).pad(10f).colspan(2)
+        rightPanel.row()
+
+        rightPanel.add().expand().fill().colspan(2)
+        rightPanel.row()
+
+        // Przycisk powrotu
+        val buttonPanel = Table()
+        val backButton = TextButton("Anuluj", skin)
+        backButton.addListener(object : ChangeListener() {
             override fun changed(event: ChangeEvent?, actor: Actor?) {
                 game.showCharacterSelectionScreen()
             }
         })
+        buttonPanel.add(backButton).width(280f).height(40f).pad(5f)
+        rightPanel.add(buttonPanel).pad(10f).bottom().colspan(2)
 
-        // Przyciski w jednym wierszu
-        val buttonsTable = Table()
-        buttonsTable.add(confirmButton).width(150f).height(40f).padRight(20f)
-        buttonsTable.add(cancelButton).width(150f).height(40f)
+        // Dodanie paneli do głównej tabeli
+        mainTable.add(leftPanel).width(350f).expandY().fillY().pad(10f)
+        mainTable.add(centerPanel).expand().fill()
+        mainTable.add(rightPanel).width(350f).expandY().fillY().pad(10f)
 
-        // Aktualizacja układu
-        table.add(titleLabel).colspan(3).pad(20f)
-        table.row()
-        table.add(loggedAsLabel).colspan(3).pad(10f)
-        table.row()
-
-        // Dodaj pole nicku
-        val nicknameTable = Table()
-        nicknameTable.add(nicknameLabel).padRight(10f)
-        nicknameTable.add(nicknameField).width(200f)
-        table.add(nicknameTable).colspan(3).pad(10f)
-        table.row()
-
-        table.add(classesTable).colspan(3).pad(20f)
-        table.row()
-        table.add(buttonsTable).colspan(3).pad(20f)
-
-        stage.addActor(table)
+        stage.addActor(mainTable)
     }
 
-    private fun createClassPanel(name: String, description: String, classIndex: Int): Table {
-        val panel = Table()
-        panel.background = skin.newDrawable("white", Color(0.2f, 0.2f, 0.3f, 0.8f))
+    private fun createRaceItem(raceTexture: Texture, raceId: String, factionId: String): Container<Image> {
+        val container = Container<Image>()
 
-        val nameLabel = Label(name, skin)
-        nameLabel.setFontScale(1.2f)
+        val isSelected = selectedRace == raceId
 
-        // Sprawdzanie tekstur
-        val image = if (::archerTexture.isInitialized && ::mageTexture.isInitialized && ::warriorTexture.isInitialized) {
-            Image(when (classIndex) {
-                0 -> archerTexture
-                1 -> mageTexture
-                else -> warriorTexture
-            })
+        val backgroundColor = if (isSelected) {
+            when (factionId) {
+                "WATAHA" -> Color(0.6f, 0.25f, 0.12f, 1f)
+                "ZAKON" -> Color(0.2f, 0.35f, 0.65f, 1f)
+                else -> Color(0.4f, 0.5f, 0.4f, 1f)
+            }
         } else {
-            // Jeśli tekstury nie są dostępne, utwórz kolorowy kwadrat
-            val colorSquare = Table()
-            colorSquare.background = skin.newDrawable("white", when (classIndex) {
-                0 -> Color(0.2f, 0.8f, 0.2f, 1f) // Zielony dla łucznika
-                1 -> Color(0.2f, 0.2f, 0.9f, 1f) // Niebieski dla maga
-                else -> Color(0.9f, 0.2f, 0.2f, 1f) // Czerwony dla wojownika
-            })
-            colorSquare
+            Color(0.2f, 0.2f, 0.25f, 0.8f)
         }
 
-        val descLabel = Label(description, skin)
-        descLabel.wrap = true
+        container.background = skin.newDrawable("white", backgroundColor)
 
-        val selectButton = TextButton("Wybierz", skin)
-
-        // Podświetl wybraną klasę
-        if (selectedClass == classIndex) {
-            panel.background = skin.newDrawable("white", Color(0.3f, 0.5f, 0.3f, 0.8f))
+        if (::goblinTexture.isInitialized && ::humanTexture.isInitialized && ::undeadTexture.isInitialized && ::elfTexture.isInitialized) {
+            val image = Image(raceTexture)
+            container.actor = image
+            container.fill()
+        } else {
+            val fallbackColor = when (factionId) {
+                "WATAHA" -> Color(0.8f, 0.3f, 0.1f, 1f)
+                "ZAKON" -> Color(0.2f, 0.4f, 0.8f, 1f)
+                else -> Color(0.5f, 0.5f, 0.5f, 1f)
+            }
+            val placeholder = Image(skin.newDrawable("white", fallbackColor))
+            container.actor = placeholder
+            container.fill()
         }
 
-        selectButton.addListener(object : ChangeListener() {
-            override fun changed(event: ChangeEvent?, actor: Actor?) {
-                selectedClass = classIndex
-                stage.clear()
+        container.touchable = com.badlogic.gdx.scenes.scene2d.Touchable.enabled
+        container.addListener(object : com.badlogic.gdx.scenes.scene2d.InputListener() {
+            override fun touchDown(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                return true
+            }
+
+            override fun touchUp(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                selectedRace = raceId
+                selectedFaction = factionId
                 createUI()
             }
         })
 
-        panel.add(nameLabel).colspan(2).pad(5f)
-        panel.row()
-        panel.add(image).size(128f, 128f).pad(10f)
-        panel.row()
-        panel.add(descLabel).width(180f).height(70f).pad(5f)
-        panel.row()
-        panel.add(selectButton).width(120f).height(40f).pad(10f)
+        return container
+    }
 
-        return panel
+    private fun createClassLogoItem(classIndex: Int, logoTexture: Texture): Container<Image> {
+        val container = Container<Image>()
+
+        val isSelected = selectedClass == classIndex
+
+        // Jeśli wybrany - lekkie białe tło, jeśli nie - przezroczyste
+        val backgroundColor = if (isSelected) {
+            Color(1f, 1f, 1f, 0.05f)
+        } else {
+            Color(0f, 0f, 0f, 0f)
+        }
+
+        container.background = skin.newDrawable("white", backgroundColor)
+
+        if (::archerLogoTexture.isInitialized && ::mageLogoTexture.isInitialized && ::warriorLogoTexture.isInitialized) {
+            val image = Image(logoTexture)
+            container.actor = image
+            container.fill()
+        } else {
+            val placeholder = Image(skin.newDrawable("white", getClassColor(classIndex)))
+            container.actor = placeholder
+            container.fill()
+        }
+
+        container.touchable = com.badlogic.gdx.scenes.scene2d.Touchable.enabled
+        container.addListener(object : com.badlogic.gdx.scenes.scene2d.InputListener() {
+            override fun touchDown(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
+                return true
+            }
+
+            override fun touchUp(event: com.badlogic.gdx.scenes.scene2d.InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                selectedClass = classIndex
+                createUI()
+            }
+        })
+
+        return container
+    }
+
+    private fun updateCharacterImage() {
+        characterImageContainer.clear()
+
+        if (selectedRace != "NONE" && skinManager != null) {
+            // Stwórz custom actor do renderowania skina
+            val skinPreviewActor = object : Actor() {
+                override fun draw(batch: Batch?, parentAlpha: Float) {
+                    batch?.end()
+
+                    // Użyj osobnego batcha dla skina
+                    skinPreviewBatch?.let { skinBatch ->
+                        if (batch != null) {
+                            skinBatch.projectionMatrix = batch.projectionMatrix
+                        }
+                        skinBatch.begin()
+
+                        // Stwórz tymczasowego gracza do podglądu
+                        val previewRace = when (selectedRace) {
+                            "GOBLIN" -> pl.decodesoft.player.Race.GOBLIN
+                            "HUMAN" -> pl.decodesoft.player.Race.HUMAN
+                            "UNDEAD" -> pl.decodesoft.player.Race.UNDEAD
+                            "ELF" -> pl.decodesoft.player.Race.ELF
+                            else -> pl.decodesoft.player.Race.HUMAN
+                        }
+
+                        // Pobierz skin z cache
+                        val skin = skinManager!!.getSkinForRace(previewRace, selectedClass)
+
+                        // Renderuj w centrum aktora
+                        val centerX = x + width / 2
+                        val centerY = y + height / 2
+
+                        skin?.renderIdle(skinBatch, centerX, centerY, 3f, Direction.DOWN)
+
+                        skinBatch.end()
+                    }
+
+                    batch?.begin()
+                }
+            }
+
+            skinPreviewActor.setSize(400f, 400f)
+            characterImageContainer.actor = skinPreviewActor
+            characterImageContainer.size(400f, 400f)
+            characterImageContainer.fill()
+            return
+        }
+
+        // Fallback - użyj tekstur ras jeśli dostępne
+        if (selectedRace != "NONE") {
+            val raceTexture = when (selectedRace) {
+                "GOBLIN" -> goblinTexture
+                "HUMAN" -> humanTexture
+                "UNDEAD" -> undeadTexture
+                "ELF" -> elfTexture
+                else -> null
+            }
+
+            if (raceTexture != null && ::goblinTexture.isInitialized) {
+                val image = Image(raceTexture)
+                characterImageContainer.actor = image
+                characterImageContainer.size(400f, 400f)
+                return
+            }
+        }
+
+        // Ostateczny fallback - tekstury klas
+        if (::archerTexture.isInitialized && ::mageTexture.isInitialized && ::warriorTexture.isInitialized) {
+            val texture = when (selectedClass) {
+                0 -> archerTexture
+                1 -> mageTexture
+                else -> warriorTexture
+            }
+            val image = Image(texture)
+            characterImageContainer.actor = image
+            characterImageContainer.size(400f, 400f)
+        } else {
+            val placeholder = Table()
+            placeholder.background = skin.newDrawable("white", getClassColor(selectedClass))
+            characterImageContainer.actor = placeholder
+            characterImageContainer.size(400f, 400f)
+        }
+    }
+
+    private fun getClassName(classIndex: Int): String {
+        return when (classIndex) {
+            0 -> "Łucznik"
+            1 -> "Mag"
+            else -> "Wojownik"
+        }
+    }
+
+    private fun getClassDescription(classIndex: Int): String {
+        return when (classIndex) {
+            0 -> """
+                Łucznik to mistrz walki na dystans, specjalizujący się w precyzyjnych atakach z łuku. 
+                
+                Jego strzały są śmiertelnie skuteczne przeciwko pojedynczym celom. Posiada wysoką zwinność, 
+                co pozwala mu unikać ataków wrogów i szybko zmieniać pozycję na polu bitwy.
+                
+                Idealny dla graczy ceniących strategiczne podejście i wysokie obrażenia.
+            """.trimIndent()
+            1 -> """
+                Mag włada potężną magią, która może zmienić bieg każdej bitwy. 
+                
+                Specjalizuje się w zaklęciach obszarowych, które zadają obrażenia wielu wrogom jednocześnie. 
+                Potrafi kontrolować pole bitwy poprzez efekty kontroli i osłabienia przeciwników.
+                
+                Wybór dla graczy lubiących taktyczne podejście i niszczycielską moc magii.
+            """.trimIndent()
+            else -> """
+                Wojownik to wytrzymały czempion walki wręcz, który staje na pierwszej linii frontu.
+                
+                Posiada najwyższe punkty zdrowia i może przyjmować na siebie najwięcej obrażeń, 
+                chroniąc tym samym swoich sojuszników. Jego siła w bezpośrednim starciu jest niezrównana.
+                
+                Doskonały wybór dla tych, którzy lubią być w centrum akcji i chronić drużynę.
+            """.trimIndent()
+        }
+    }
+
+    private fun getClassColor(classIndex: Int): Color {
+        return when (classIndex) {
+            0 -> Color(0.67f, 0.83f, 0.45f, 1f)
+            1 -> Color(0.41f, 0.8f, 0.94f, 1f)
+            else -> Color(0.78f, 0.61f, 0.43f, 1f)
+        }
     }
 
     private fun createCharacter() {
-        // Walidacja nicku
         if (playerNickname.isBlank() || playerNickname.length < 3) {
             showError("Nazwa postaci musi mieć co najmniej 3 znaki")
+            return
+        }
+
+        if (selectedFaction == "NONE" || selectedRace == "NONE") {
+            showError("Musisz wybrać rasę!")
             return
         }
 
@@ -297,13 +587,19 @@ class CharacterCreationScreen(
             try {
                 val response = httpClient.post("http://$IP_ADDRESS/character/create") {
                     contentType(ContentType.Application.Json)
-                    setBody(CharacterCreateRequest(userId, selectedClass, playerNickname, slotIndex))
+                    setBody(CharacterCreateRequest(
+                        userId,
+                        selectedClass,
+                        playerNickname,
+                        slotIndex,
+                        selectedFaction,
+                        selectedRace
+                    ))
                 }
 
                 val createResponse = Json.decodeFromString<CharacterCreateResponse>(response.bodyAsText())
 
                 if (createResponse.success) {
-                    // Powrót do ekranu wyboru postaci
                     Gdx.app.postRunnable {
                         game.showCharacterSelectionScreen()
                     }
@@ -330,11 +626,14 @@ class CharacterCreationScreen(
     }
 
     override fun render(delta: Float) {
-        Gdx.gl.glClearColor(0.1f, 0.1f, 0.2f, 1f)
+        Gdx.gl.glClearColor(0.1f, 0.1f, 0.15f, 1.0f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
         camera.update()
         batch.projectionMatrix = camera.combined
+
+        // Update animacji skinów
+        skinManager?.update(delta)
 
         stage.act(delta)
         stage.draw()
@@ -351,11 +650,21 @@ class CharacterCreationScreen(
     override fun dispose() {
         stage.dispose()
         batch.dispose()
+        skinPreviewBatch?.dispose()
+        skinManager?.dispose()
         font.dispose()
+        smallFont.dispose()
 
         if (::archerTexture.isInitialized) archerTexture.dispose()
         if (::mageTexture.isInitialized) mageTexture.dispose()
         if (::warriorTexture.isInitialized) warriorTexture.dispose()
+        if (::archerLogoTexture.isInitialized) archerLogoTexture.dispose()
+        if (::mageLogoTexture.isInitialized) mageLogoTexture.dispose()
+        if (::warriorLogoTexture.isInitialized) warriorLogoTexture.dispose()
+        if (::goblinTexture.isInitialized) goblinTexture.dispose()
+        if (::humanTexture.isInitialized) humanTexture.dispose()
+        if (::undeadTexture.isInitialized) undeadTexture.dispose()
+        if (::elfTexture.isInitialized) elfTexture.dispose()
 
         creationScope.cancel()
         httpClient.close()

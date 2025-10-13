@@ -21,7 +21,6 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
 import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
-import pl.decodesoft.klasy.projectiles.Arrow
 import pl.decodesoft.klasy.skile.SkileManager
 import pl.decodesoft.network.MessageManager
 import pl.decodesoft.player.Player
@@ -32,17 +31,17 @@ class Archer(
     networkScope: CoroutineScope,
     session: () -> DefaultWebSocketSession?,
     skileManager: SkileManager,
-    messageManager: MessageManager // Dodaj MessageManager
+    messageManager: MessageManager
 ) : CharacterClass(player, networkScope, session, skileManager, messageManager) {
 
     // Nadpisane właściwości z klasy bazowej
-    override val attackCooldown = 3.0f
+    override val attackCooldown = 2.0f
     override var attackTimer = 0f
     override val attackRange = 300f
     override val attackName = "Strzał"
     override val attackColor: Color = Color.ORANGE
 
-    // strzały
+    // strzały - TYLKO wysyła request do serwera
     override fun performAttack(targetX: Float, targetY: Float, targetId: String) {
         // Oblicz kierunek strzały
         val dirX = targetX - player.x
@@ -53,20 +52,9 @@ class Archer(
         val normalizedDirX = dirX / distance
         val normalizedDirY = dirY / distance
 
-        // Utwórz nową strzałę
-        val arrow = Arrow(
-            player.x,
-            player.y,
-            normalizedDirX,
-            normalizedDirY,
-            player.id,
-            targetId,
-            targetX,
-            targetY
-        )
-
-        // Dodaj strzałę do menedżera umiejętności
-        skileManager.addSkill(arrow)
+        // USUNIĘTO: Tworzenie strzały lokalnie
+        // Strzała zostanie utworzona TYLKO gdy serwer zatwierdzi atak
+        // i wyśle broadcast RANGED_ATTACK
 
         // Wyślij informację o strzale do serwera
         sendAttackMessage(

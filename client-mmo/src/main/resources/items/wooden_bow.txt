@@ -1,0 +1,15 @@
+id=wooden_bow
+name=Drewniany Łuk
+type=WEAPON
+rarity=RARE
+requiredLevel=2
+strengthBonus=0
+agilityBonus=1
+spellPowerBonus=0
+staminaBonus=2
+manaBonus=1
+armorBonus=0
+attackSpeedBonus=26
+critRatingBonus=22
+icon=bow.png
+requiredClass=0

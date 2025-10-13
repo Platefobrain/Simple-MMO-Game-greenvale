@@ -17,8 +17,13 @@
 
 package pl.decodesoft.klasy.skile
 
+import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Vector2
+import io.ktor.websocket.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import pl.decodesoft.enemy.EnemyClient
 import pl.decodesoft.klasy.projectiles.Arrow
 import pl.decodesoft.klasy.projectiles.Fireball
@@ -27,7 +32,9 @@ import pl.decodesoft.klasy.projectiles.Sword
 // Klasa zarządzająca wszystkimi umiejętnościami (pociskami) w grze
 class SkileManager(
     private val localPlayerId: String,
-    private val enemies: Map<String, EnemyClient> = emptyMap()
+    private val enemies: Map<String, EnemyClient> = emptyMap(),
+    private val networkScope: CoroutineScope,
+    private val getSession: () -> DefaultWebSocketSession?,
 ) {
     // Lista wszystkich aktywnych umiejętności
     private val activeSkills = mutableListOf<Skile>()
@@ -38,6 +45,18 @@ class SkileManager(
     // Dodaj nową umiejętność do listy
     fun addSkill(skill: Skile) {
         activeSkills.add(skill)
+    }
+
+    fun renderBatch(batch: SpriteBatch) {
+        // Renderuj strzały
+        activeSkills.filterIsInstance<Arrow>().forEach { arrow ->
+            arrow.render(batch)
+        }
+
+        // Renderuj kule ognia
+        activeSkills.filterIsInstance<Fireball>().forEach { fireball ->
+            fireball.render(batch)
+        }
     }
 
     // Aktualizacja wszystkich umiejętności
@@ -131,6 +150,24 @@ class SkileManager(
                     // Zatrzymaj pocisk trafiony w przeciwnika
                     handleEnemyHit(enemyId, attackerId)
                 }
+            }
+        }
+    }
+
+    @Suppress("unused")
+    fun sendSkillUse(skillType: String, targetId: String?, x: Float, y: Float, playerId: String) {
+        networkScope.launch {
+            try {
+                val session = getSession()
+                if (session != null) {
+                    val targetMsg = targetId ?: "null"
+                    val skillMessage = "SKILL|$skillType|$x|$y|$targetMsg|$playerId"
+                    session.send(skillMessage)
+                } else {
+                    Gdx.app.error("PlayerNetworkManager", "Sesja jest null, nie można użyć umiejętności")
+                }
+            } catch (e: Exception) {
+                Gdx.app.error("PlayerNetworkManager", "Błąd wysyłania użycia umiejętności: ${e.message}")
             }
         }
     }

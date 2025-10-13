@@ -29,7 +29,7 @@ class LoadingScreen(val game: MMOGame) : Screen {
     }
 
     override fun render(delta: Float) {
-        Gdx.gl.glClearColor(0f, 0f, 0f, 1f)
+        Gdx.gl.glClearColor(0.275f, 0.275f, 0.275f, 1.0f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
         val screenWidth = Gdx.graphics.width.toFloat()

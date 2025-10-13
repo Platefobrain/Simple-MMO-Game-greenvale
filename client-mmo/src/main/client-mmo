@@ -1,3 +1,60 @@
+🐺 WATAHA
+
+Hasło: „Wolność rodzi siłę.”
+Symbol: srebrny wilk na tle ciemnej zieleni i księżyca.
+Kolory: ciemna zieleń, brąz, szarość, czerwień.
+Stolica: Wichrowy Jar – obozowisko pośród dzikich lasów i gór GreenVale.
+
+Opis (dla UI):
+Wataha to frakcja wolnych ludów, duchów i wojowników natury. Wierzą, że świat jest żywą istotą, a prawdziwa moc płynie z jego dzikości – nie z praw, lecz z instynktu.
+Nie potrzebują murów ani koron — ich siłą jest jedność i lojalność wobec stada.
+Zakon nazywa ich barbarzyńcami, ale oni uważają się za ostatnich prawdziwych obrońców natury.
+
+Magia: szamańska, żywiołowa, oparta na ogniu, ziemi i duchach przodków.
+Rasy dominujące: orkowie, gobliny, ludzie pogranicza, wilkołaki, duchy lasu.
+Styl walki: brutalny, bezpośredni, często wspierany totemami i magią natury.
+
+☀️ ZAKON
+
+Hasło: „W porządku tkwi światło.”
+Symbol: złote słońce wpisane w tarczę z runicznym krzyżem.
+Kolory: złoto, biel, błękit, srebro.
+Stolica: Twierdza Świtu – monumentalna cytadela na szczycie Gór Aurelskich.
+
+Opis (dla UI):
+Zakon to sojusz ludzi, elfów i magów, którzy wierzą w siłę ładu, wiedzy i boskiego światła.
+Ich celem jest ochrona GreenVale przed chaosem, plugawą magią i bestiami z dziczy.
+W ich oczach Wataha to zagrożenie dla cywilizacji — bezrozumni dzicy, których trzeba okiełznać.
+Ale pod blaskiem Zakonu również kryje się cień — fanatyzm, kontrola i nieustanna potrzeba władzy nad światem.
+
+Magia: runiczna, uzdrawiająca, oparta na świetle i porządku.
+Rasy dominujące: ludzie, elfy, anielscy strażnicy, runiczni magowie.
+Styl walki: zdyscyplinowany, precyzyjny, często wspierany barierami i magią światła.
+
+⚔️ Historia konfliktu
+
+Dawno temu, w czasach Pierwszego Blasku, ludzie i elfy połączyli się w Zakonie, by zapanować nad magią GreenVale.
+Nie wszyscy jednak zgodzili się, by życie podporządkować prawom i zaklęciom. Ci, którzy odrzucili łańcuchy Zakonu, zniknęli w dzikich lasach i stali się Watahą — strażnikami wolności i natury.
+
+Od tamtej pory świat rozdarty jest między światłem i cieniem, między porządkiem i instynktem.
+GreenVale płonie w wiecznej wojnie o serce natury.
+
+🌿 Przykład w UI (np. ekran wyboru frakcji):
+
+[ZAKON]
+
+„Światło prowadzi nas ku czystości i porządkowi.”
+– Arcykapłan Aurel, Twierdza Świtu
+
+[WATAHA]
+
+„Nie ujarzmisz burzy, jeśli sam się jej boisz.”
+– Wódz Ragan Wilczy Kieł, Wichrowy Jar
+
+
+
+
+
 Kompletny przegląd wszystkich plików projektu
 Menedżery efektów i systemów
 CombatEffectsManager.kt

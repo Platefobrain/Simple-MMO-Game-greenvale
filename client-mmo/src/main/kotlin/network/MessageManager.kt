@@ -20,18 +20,24 @@ package pl.decodesoft.network
 import com.badlogic.gdx.graphics.Color
 import pl.decodesoft.MMOGame
 import pl.decodesoft.network.handlers.*
+import kotlin.math.abs
+import kotlin.math.sign
 
 // Zmodyfikowany MessageManager z systemem kolejkowania i obsługą itemów
 class MessageManager(game: MMOGame) {
     private val handlers = mutableListOf<MessageHandler>()
 
-    // Klasa dla pojedynczego komunikatu
+    // Klasa dla pojedynczego komunikatu z animacją
     data class DisplayMessage(
         val text: String,
         var timer: Float,
         val duration: Float,
         var yOffset: Float = 0f, // Offset w górę od podstawowej pozycji
-        val color: Color = Color.WHITE // DODANE: Kolor komunikatu
+        val color: Color = Color.WHITE, // Kolor komunikatu
+        var currentY: Float = -30f, // Aktualna pozycja Y (startuje poniżej)
+        var targetY: Float = 0f, // Docelowa pozycja Y
+        var isMoving: Boolean = true, // Czy komunikat się jeszcze porusza
+        val moveSpeed: Float = 150f // Prędkość ruchu w pikselach na sekundę
     )
 
     // Lista aktywnych komunikatów
@@ -44,21 +50,32 @@ class MessageManager(game: MMOGame) {
         handlers.add(ItemMessageHandler(game))
         handlers.add(PlayerMessageHandler(game))
         handlers.add(EnemyMessageHandler(game))
+        handlers.add(NPCMessageHandler(game))
         handlers.add(ChatMessageHandler(game))
         handlers.add(CombatMessageHandler(game))
         handlers.add(PathfindingMessageHandler(game))
         handlers.add(TextMessageHandler(game))
     }
 
-    // Wyświetl komunikat na środku ekranu
+    // Wyświetl komunikat na środku ekranu z animacją
     fun showMessage(message: String, duration: Float = 2f, color: Color = Color.WHITE) {
         // Przesuń wszystkie istniejące komunikaty w górę
         activeMessages.forEach { msg ->
-            msg.yOffset += messageSpacing
+            msg.targetY += messageSpacing
+            msg.isMoving = true // Uruchom ponownie animację dla starszych komunikatów
         }
 
-        // Dodaj nowy komunikat na podstawowej pozycji z kolorem
-        val newMessage = DisplayMessage(message, duration, duration, 0f, color)
+        // Dodaj nowy komunikat na podstawowej pozycji z animacją
+        val newMessage = DisplayMessage(
+            text = message,
+            timer = duration,
+            duration = duration,
+            yOffset = 0f,
+            color = color,
+            currentY = -30f, // Startuje poniżej środka
+            targetY = 0f,    // Docelowa pozycja na środku
+            isMoving = true
+        )
         activeMessages.add(0, newMessage) // Dodaj na początku listy
 
         // Usuń najstarsze komunikaty jeśli przekroczono limit
@@ -67,11 +84,24 @@ class MessageManager(game: MMOGame) {
         }
     }
 
-    // Aktualizuj timer komunikatów
+    // Aktualizuj timer komunikatów i animacje
     fun update(delta: Float) {
         val toRemove = mutableListOf<DisplayMessage>()
 
         activeMessages.forEach { message ->
+            // Animacja ruchu w górę
+            if (message.isMoving) {
+                val distance = message.targetY - message.currentY
+                if (abs(distance) > 1f) { // Jeszcze się porusza
+                    message.currentY += message.moveSpeed * delta * sign(distance)
+                } else {
+                    // Zatrzymaj się na docelowej pozycji
+                    message.currentY = message.targetY
+                    message.isMoving = false
+                }
+            }
+
+            // Odliczanie czasu
             message.timer -= delta
             if (message.timer <= 0) {
                 toRemove.add(message)
@@ -87,10 +117,6 @@ class MessageManager(game: MMOGame) {
 
     // Główna metoda przetwarzania wiadomości
     fun processMessage(message: String) {
-        // DODAJ DEBUG:
-        if (message.startsWith("ITEM_")) {
-            println("🔥 DEBUG: MessageManager otrzymał wiadomość ITEM: $message")
-        }
 
         if (message.contains("|")) {
             val parts = message.split("|")
@@ -98,21 +124,7 @@ class MessageManager(game: MMOGame) {
 
             val messageType = parts[0]
 
-            // DODAJ DEBUG:
-            if (messageType.startsWith("ITEM_")) {
-                println("🔥 DEBUG: MessageManager szuka handlera dla: $messageType")
-            }
-
             val handlerFound = handlers.firstOrNull { it.canHandle(messageType) }
-
-            // DODAJ DEBUG:
-            if (messageType.startsWith("ITEM_")) {
-                if (handlerFound != null) {
-                    println("🔥 DEBUG: Znaleziono handler: ${handlerFound.javaClass.simpleName}")
-                } else {
-                    println("🔥 DEBUG: NIE ZNALEZIONO handlera dla: $messageType")
-                }
-            }
 
             handlerFound?.handleMessage(parts) ?: run {
                 println("Nieobsługiwana wiadomość: $message")

@@ -21,7 +21,6 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
 import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
-import pl.decodesoft.klasy.projectiles.Sword
 import pl.decodesoft.klasy.skile.SkileManager
 import pl.decodesoft.network.MessageManager
 import pl.decodesoft.player.Player
@@ -32,17 +31,17 @@ class Warrior(
     networkScope: CoroutineScope,
     session: () -> DefaultWebSocketSession?,
     skileManager: SkileManager,
-    messageManager: MessageManager // DODANE: messageManager
-) : CharacterClass(player, networkScope, session, skileManager, messageManager) { // DODANE: messageManager
+    messageManager: MessageManager
+) : CharacterClass(player, networkScope, session, skileManager, messageManager) {
 
     // Nadpisane właściwości z klasy bazowej
-    override val attackCooldown = 2f
+    override val attackCooldown = 2.0f
     override var attackTimer = 0f
     override val attackRange = 45f
     override val attackName = "Atak mieczem"
     override val attackColor: Color = Color.ORANGE
 
-    // Wykonuje atak mieczem w kierunku celu
+    // Wykonuje atak mieczem - TYLKO wysyła request do serwera
     override fun performAttack(targetX: Float, targetY: Float, targetId: String) {
         // Oblicz kierunek ataku
         val dirX = targetX - player.x
@@ -53,20 +52,9 @@ class Warrior(
         val normalizedDirX = dirX / distance
         val normalizedDirY = dirY / distance
 
-        // Utwórz nowy atak mieczem
-        val sword = Sword(
-            player.x,
-            player.y,
-            normalizedDirX,
-            normalizedDirY,
-            player.id,
-            targetId,
-            targetX,
-            targetY
-        )
-
-        // Dodaj atak do menedżera umiejętności
-        skileManager.addSkill(sword)
+        // USUNIĘTO: Tworzenie ataku mieczem lokalnie
+        // Atak zostanie utworzony TYLKO gdy serwer zatwierdzi atak
+        // i wyśle broadcast MELEE_ATTACK
 
         // Wyślij informację o ataku do serwera
         sendAttackMessage(

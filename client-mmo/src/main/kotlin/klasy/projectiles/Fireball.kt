@@ -18,13 +18,14 @@
 package pl.decodesoft.klasy.projectiles
 
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
 import pl.decodesoft.enemy.EnemyClient
-import pl.decodesoft.player.Player
 import pl.decodesoft.klasy.skile.Skile
-import java.util.UUID
+import pl.decodesoft.player.Player
+import java.util.*
 
 /**
  * Klasa reprezentująca kulę ognia wystrzeloną przez Maga
@@ -50,6 +51,13 @@ class Fireball(
     private val direction = Vector2(dirX, dirY).nor()
     private val hitbox = Rectangle(x - radius, y - radius, size, size)
 
+    // ✅ Współdzielona tekstura (nie tworzy nowego obiektu)
+    private val fireballTexture = ProjectileTextures.fireball
+    private val fireballScale = 0.3f
+
+    private var rotationAngle: Float = 0f
+    private val rotationSpeed: Float = 560f // stopnie na sekundę
+
     override fun update(delta: Float): Boolean {
         if (isToRemove) return false
 
@@ -58,13 +66,16 @@ class Fireball(
         y += direction.y * move
         hitbox.setPosition(x - radius, y - radius)
 
+        // Rotacja
+        rotationAngle = (rotationAngle + rotationSpeed * delta) % 360f
+
         val arrived = Vector2.dst(x, y, targetX, targetY) <= 6f
         if (arrived) markForRemoval()
 
         return !arrived
     }
 
-    override fun checkCollision(player: Player) = /* identycznie jak w Arrow */
+    override fun checkCollision(player: Player) =
         (targetId == null || targetId == player.id) &&
                 Vector2.dst(x, y, player.x, player.y) <= radius + 5f
 
@@ -72,10 +83,36 @@ class Fireball(
         (targetId == null || targetId == "enemy_${enemy.id}") &&
                 Vector2.dst(x, y, enemy.x, enemy.y) <= radius + 5f
 
-    override fun markForRemoval() { isToRemove = true }
+    override fun markForRemoval() {
+        isToRemove = true
+    }
 
     override fun render(shapeRenderer: ShapeRenderer) {
-        shapeRenderer.color = color
-        shapeRenderer.circle(x, y, radius)
+        // Pusta implementacja - zachowana dla kompatybilności
+    }
+
+    fun render(batch: SpriteBatch) {
+        val finalScale = fireballScale
+        val centerX = x - fireballTexture.width / 2 * finalScale
+        val centerY = y - fireballTexture.height / 2 * finalScale
+
+        batch.draw(
+            fireballTexture,
+            centerX,
+            centerY,
+            fireballTexture.width * finalScale / 2f,
+            fireballTexture.height * finalScale / 2f,
+            fireballTexture.width * finalScale,
+            fireballTexture.height * finalScale,
+            1f,
+            1f,
+            rotationAngle,
+            0,
+            0,
+            fireballTexture.width,
+            fireballTexture.height,
+            false,
+            false
+        )
     }
 }

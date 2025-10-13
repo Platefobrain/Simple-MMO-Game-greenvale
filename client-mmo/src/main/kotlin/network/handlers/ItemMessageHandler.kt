@@ -10,7 +10,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
+ *7 agi i 12 jak dodam itemy
  * You should have received a copy of the GNU General Public License
  * along with [GreenVale].  If not, see <https://www.gnu.org/licenses/>.
  */
@@ -20,10 +20,10 @@ package pl.decodesoft.network.handlers
 import com.badlogic.gdx.graphics.Color
 import pl.decodesoft.MMOGame
 import pl.decodesoft.network.MessageHandler
-import pl.decodesoft.ui.character.ClientItem
-import pl.decodesoft.ui.inventory.InventoryItem
+import pl.decodesoft.items.character.ClientItem
+import pl.decodesoft.items.inventory.InventoryItem
 
-// Handler do obsługi komunikatów związanych z itemami - POPRAWIONY
+// Handler do obsługi komunikatów związanych z itemami
 class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
 
     override fun canHandle(messageType: String): Boolean {
@@ -37,14 +37,18 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
             "ITEM_UNEQUIP_FAILED", // Błąd zdjęcia itemu
             "ITEM_GIVEN",          // Otrzymanie itemu
             "ITEM_GIVE_FAILED",    // Błąd dania itemu
+            "ITEM_MOVED",          // Potwierdzenie przeniesienia itemu
+            "ITEM_MOVE_FAILED",    // Błąd przeniesienia itemu
+            "ITEM_PICKED_UP",      // Potwierdzenie podniesienia itemu
+            "PICKUP_FAILED",       // Błąd podniesienia itemu
+            "REMOVE_DROPPED_ITEM", // Usuń item z ziemi
+            "DROPPED_ITEMS_LIST",  // Lista dropnietych itemów
             "STATS_UPDATE",        // Aktualizacja statystyk po zmianie itemów
-            "ITEM_MOVED",          // NOWE - Potwierdzenie przeniesienia itemu
-            "ITEM_MOVE_FAILED"     // NOWE - Błąd przeniesienia itemu
+            "CURRENCY_UPDATE"      // Waluta
         )
     }
 
     override fun handleMessage(parts: List<String>) {
-        println("DEBUG: ItemMessageHandler.handleMessage wywołane z: ${parts[0]}")
 
         when (parts[0]) {
             "ITEM_LIST" -> handleItemList(parts)
@@ -56,19 +60,18 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
             "ITEM_UNEQUIP_FAILED" -> handleItemUnequipFailed(parts)
             "ITEM_GIVEN" -> handleItemGiven(parts)
             "ITEM_GIVE_FAILED" -> handleItemGiveFailed(parts)
+            "ITEM_MOVED" -> handleItemMoved(parts)
+            "ITEM_MOVE_FAILED" -> handleItemMoveFailed(parts)
+            "ITEM_PICKED_UP" -> handleItemPickedUp(parts)
+            "PICKUP_FAILED" -> handlePickupFailed(parts)
+            "REMOVE_DROPPED_ITEM" -> handleRemoveDroppedItem(parts)
+            "DROPPED_ITEMS_LIST" -> handleDroppedItemsList(parts)
             "STATS_UPDATE" -> handleStatsUpdate(parts)
-            "ITEM_MOVED" -> {
-                println("DEBUG: Przekierowuję do handleItemMoved")
-                handleItemMoved(parts)
-            }
-            "ITEM_MOVE_FAILED" -> {
-                println("DEBUG: Przekierowuję do handleItemMoveFailed")
-                handleItemMoveFailed(parts)
-            }
+            "CURRENCY_UPDATE" -> handleCurrencyUpdate(parts)
         }
     }
 
-    // Obsługuje listę wszystkich dostępnych itemów w grze - BEZ ZMIAN
+    // Obsługuje listę wszystkich dostępnych itemów w grze
     private fun handleItemList(parts: List<String>) {
         if (parts.size < 2) return
 
@@ -80,16 +83,22 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
 
         val items = itemsData.split(";").mapNotNull { itemData ->
             val itemParts = itemData.split(":")
-            if (itemParts.size >= 7) {
+            if (itemParts.size >= 13) {
                 try {
                     ClientItem(
                         id = itemParts[0],
                         name = itemParts[1],
                         type = itemParts[2],
-                        strengthBonus = itemParts[3].toInt(),
-                        agilityBonus = itemParts[4].toInt(),
-                        spellPowerBonus = itemParts[5].toInt(),
-                        staminaBonus = itemParts[6].toInt()
+                        rarity = itemParts[3],
+                        requiredLevel = itemParts[4].toInt(),
+                        strengthBonus = itemParts[5].toInt(),
+                        agilityBonus = itemParts[6].toInt(),
+                        spellPowerBonus = itemParts[7].toInt(),
+                        staminaBonus = itemParts[8].toInt(),
+                        manaBonus = itemParts[9].toInt(),
+                        armorBonus = itemParts[10].toInt(),
+                        attackSpeedBonus = itemParts[11].toInt(),
+                        critRatingBonus = itemParts[12].toInt()
                     )
                 } catch (e: NumberFormatException) {
                     println("Błąd parsowania itemu: $itemData")
@@ -102,9 +111,6 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
         }
 
         println("Otrzymano listę ${items.size} itemów z serwera")
-        items.forEach { item ->
-            println("Item: ${item.name} (${item.type}) - ${item.getBonusDescription()}")
-        }
     }
 
     // Obsługuje ekwipunek gracza i aktualizuje Player
@@ -122,9 +128,6 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
         setPlayerEquipmentSlot("WEAPON", parts[5], player)
 
         println("Zaktualizowano ekwipunek gracza z serwera")
-
-        // DODANE: Odśwież UI ekwipunku
-        game.refreshEquipmentUI()
     }
 
     private fun handlePlayerInventory(parts: List<String>) {
@@ -134,13 +137,9 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
         if (inventoryData.isEmpty()) {
             // Wyczyść inventory jeśli puste
             game.itemManager.clearInventory()
-            println("DEBUG: Wyczyszczono inventory - otrzymano puste dane")
             return
         }
 
-        println("DEBUG: Otrzymano inventory z serwera: $inventoryData")
-
-        // WAŻNE: Najpierw wyczyść całe inventory
         game.itemManager.clearInventory()
 
         val items = inventoryData.split(";")
@@ -156,37 +155,39 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
                 if (itemDef != null) {
                     val inventoryItem = InventoryItem(itemId, itemDef.name, false, quantity)
                     game.setInventoryItem(slot, inventoryItem)
-                    println("DEBUG: Załadowano ${itemDef.name} do slotu $slot")
                 }
             }
         }
 
-        println("DEBUG: Załadowano inventory z serwera - ${items.size} itemów")
-
-        // DODANE: Wymuś odświeżenie UI inventory po otrzymaniu danych
+        // odswiezanie inventory
         game.refreshInventoryUI()
     }
 
     // Pomocnicza do ustawiania pojedynczego slotu
     private fun setPlayerEquipmentSlot(itemType: String, itemData: String, player: pl.decodesoft.player.Player) {
         if (itemData == "none" || itemData.isEmpty()) {
-            val removedItem = player.unequipItem(itemType)
-            println("Usunięto item z slotu $itemType: ${removedItem?.name ?: "brak"}")
+            player.unequipItem(itemType)
             return
         }
 
         val itemParts = itemData.split(":")
 
-        if (itemParts.size >= 7) {
+        if (itemParts.size >= 13) {
             try {
                 val item = ClientItem(
                     id = itemParts[0],
                     name = itemParts[1],
                     type = itemParts[2],
-                    strengthBonus = itemParts[3].toInt(),
-                    agilityBonus = itemParts[4].toInt(),
-                    spellPowerBonus = itemParts[5].toInt(),
-                    staminaBonus = itemParts[6].toInt()
+                    rarity = itemParts[3],
+                    requiredLevel = itemParts[4].toInt(),
+                    strengthBonus = itemParts[5].toInt(),
+                    agilityBonus = itemParts[6].toInt(),
+                    spellPowerBonus = itemParts[7].toInt(),
+                    staminaBonus = itemParts[8].toInt(),
+                    manaBonus = itemParts[9].toInt(),
+                    armorBonus = itemParts[10].toInt(),
+                    attackSpeedBonus = itemParts[11].toInt(),
+                    critRatingBonus = itemParts[12].toInt()
                 )
                 val replacedItem = player.equipItem(item)
                 println("Założono ${item.name} w slot $itemType" +
@@ -199,7 +200,7 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
             val itemDef = game.getItemDefinition(itemId)
             if (itemDef != null) {
                 val replacedItem = player.equipItem(itemDef)
-                println("Założono ${itemDef.name} w slot $itemType (z ItemManager)" +
+                println("Założono ${itemDef.name} w slot $itemType" +
                         if (replacedItem != null) ", zastąpiono: ${replacedItem.name}" else "")
             } else {
                 println("Nie znaleziono definicji itemu $itemId w ItemManager")
@@ -291,32 +292,8 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
         game.receiveNetworkChatMessage("SYSTEM", "System", "Błąd: $errorMessage")
     }
 
-    // Obsługuje aktualizację statystyk po zmianie itemów
-    private fun handleStatsUpdate(parts: List<String>) {
-        if (parts.size < 6) return
-
-        try {
-            val totalStrength = parts[1].toInt()
-            val totalAgility = parts[2].toInt()
-            val totalSpellPower = parts[3].toInt()
-            val totalStamina = parts[4].toInt()
-            val newMaxHealth = parts[5].toInt()
-
-            println("Aktualizacja statystyk - Str: $totalStrength, Agi: $totalAgility, SP: $totalSpellPower, Sta: $totalStamina, MaxHP: $newMaxHealth")
-
-            game.localPlayer.maxHealth = newMaxHealth
-
-            val message = "Statystyki zaktualizowane!"
-            game.messageManager.showMessage(message, 2f, Color.GOLD)
-
-        } catch (e: NumberFormatException) {
-            println("Błąd parsowania statystyk: ${parts.joinToString("|")}")
-        }
-    }
-
-    // POPRAWIONA METODA - Obsługuje potwierdzenie przeniesienia itemu
+    // Obsługuje potwierdzenie przeniesienia itemu
     private fun handleItemMoved(parts: List<String>) {
-        println("DEBUG: ItemMessageHandler.handleItemMoved wywołane z parts: ${parts.joinToString("|")}")
 
         if (parts.size < 6) {
             println("DEBUG: Za mało części w wiadomości ITEM_MOVED")
@@ -328,8 +305,6 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
         val toType = parts[3]
         val toSlot = parts[4].toIntOrNull() ?: -1
         val itemId = parts[5]
-
-        println("DEBUG: Parsowane dane: $fromType:$fromSlot -> $toType:$toSlot itemId=$itemId")
 
         // Powiadom ItemManager o ruchu
         game.handleItemMoved(fromType, fromSlot, toType, toSlot, itemId)
@@ -355,15 +330,11 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
             else -> game.messageManager.showMessage("Przeniesiono item", 2f, Color.YELLOW)
         }
 
-        // KLUCZOWA ZMIANA: Jeśli przenoszenie dotyczyło ekwipunku, odśwież UI ekwipunku
+        // Jeśli przenoszenie dotyczyło ekwipunku, odśwież UI ekwipunku
         if (fromType == "EQUIPMENT" || toType == "EQUIPMENT") {
-            println("DEBUG: Przenoszenie dotyczyło ekwipunku - odświeżam UI")
 
             // Poproś o aktualizację ekwipunku z serwera
             requestPlayerEquipmentUpdate()
-
-            // DODANE: Bezpośrednio odśwież UI ekwipunku
-            game.refreshEquipmentUI()
         }
     }
 
@@ -373,7 +344,108 @@ class ItemMessageHandler(private val game: MMOGame) : MessageHandler {
         val errorMessage = parts[1]
         println("Błąd przeniesienia itemu: $errorMessage")
 
-        game.addDamageText(game.localPlayer.x, game.localPlayer.y + 30f, "Błąd: $errorMessage", Color.RED)
-        game.receiveNetworkChatMessage("SYSTEM", "System", "Błąd przeniesienia itemu: $errorMessage")
+        game.messageManager.showMessage(errorMessage, 3f, Color.RED)
+    }
+
+    private fun handleItemPickedUp(parts: List<String>) {
+
+        if (parts.size >= 3) {
+            val itemDropId = parts[1]
+            val itemId = parts[2]
+
+            game.removeDroppedItem(itemDropId)
+
+            val itemName = game.getItemDefinition(itemId)?.name ?: itemId
+            game.messageManager.showMessage("Podniesiono: $itemName", 2f, Color.GREEN)
+
+            println("DEBUG: Requesting inventory update")
+            game.requestInventoryUpdate()
+        }
+    }
+
+    private fun handlePickupFailed(parts: List<String>) {
+        if (parts.size >= 2) {
+            val errorMessage = parts[1]
+            game.messageManager.showMessage("Nie można podnieść: $errorMessage", 3f, Color.RED)
+        }
+    }
+
+    private fun handleRemoveDroppedItem(parts: List<String>) {
+        if (parts.size >= 2) {
+            val itemDropId = parts[1]
+            game.removeDroppedItem(itemDropId)
+        }
+    }
+
+    private fun handleDroppedItemsList(parts: List<String>) {
+        if (parts.size < 2) {
+            println("Brak itemów na ziemi")
+            return
+        }
+
+        val itemsData = parts[1]
+        if (itemsData.isEmpty()) {
+            println("Lista itemów na ziemi jest pusta")
+            return
+        }
+
+        // Wyczyść aktualną listę itemów na ziemi
+        game.clearDroppedItems()
+
+        val items = itemsData.split(";")
+        for (itemData in items) {
+            val itemParts = itemData.split(":")
+            if (itemParts.size >= 4) {
+                try {
+                    val dropId = itemParts[0]
+                    val itemId = itemParts[1]
+                    val x = itemParts[2].toFloat()
+                    val y = itemParts[3].toFloat()
+
+                    // Dodaj item na ziemi do gry
+                    game.addDroppedItem(dropId, itemId, x, y)
+
+                } catch (e: NumberFormatException) {
+                    println("Błąd parsowania itemu na ziemi: $itemData")
+                }
+            }
+        }
+
+        println("Załadowano ${items.size} itemów z ziemi")
+    }
+
+    private fun handleCurrencyUpdate(parts: List<String>) {
+        if (parts.size < 4) return
+
+        val gold = parts[1].toIntOrNull() ?: 0
+        val silver = parts[2].toIntOrNull() ?: 0
+        val copper = parts[3].toIntOrNull() ?: 0
+
+        game.updatePlayerCurrency(gold, silver, copper)
+
+        println("Waluta zaktualizowana: ${gold}g ${silver}s ${copper}c")
+    }
+
+    // Obsługuje aktualizację statystyk po zmianie itemów
+    @Suppress("UNUSED_VARIABLE")
+    private fun handleStatsUpdate(parts: List<String>) {
+        if (parts.size < 10) return
+
+        try {
+            val totalStrength = parts[1].toInt()
+            val totalAgility = parts[2].toInt()
+            val totalSpellPower = parts[3].toInt()
+            val totalStamina = parts[4].toInt()
+            val totalMana = parts[5].toInt()
+            val totalArmor = parts[6].toIntOrNull() ?: 0
+            val attackCooldown = parts[7].toFloatOrNull() ?: 2.0f
+            val serverDamage = parts[8].toIntOrNull() ?: 0
+            val totalCritChance = parts[9].toDoubleOrNull() ?: 0.0
+
+            game.localPlayer.damage = serverDamage
+
+        } catch (e: NumberFormatException) {
+            println("Błąd parsowania statystyk: ${parts.joinToString("|")}")
+        }
     }
 }

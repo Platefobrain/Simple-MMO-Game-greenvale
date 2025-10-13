@@ -18,13 +18,14 @@
 package pl.decodesoft.klasy.projectiles
 
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.badlogic.gdx.math.Vector2
 import pl.decodesoft.enemy.EnemyClient
-import pl.decodesoft.player.Player
 import pl.decodesoft.klasy.skile.Skile
-import java.util.UUID
+import pl.decodesoft.player.Player
+import java.util.*
 import kotlin.math.atan2
 
 //Strzała wystrzelona przez Łucznika.
@@ -47,6 +48,9 @@ class Arrow(
 
     private val direction: Vector2 = Vector2(dirX, dirY).nor()
     private val hitbox = Rectangle(x - size / 2, y - size / 2, size, size)
+
+    private val arrowTexture = ProjectileTextures.arrow
+    private val arrowScale = 0.1f
 
     private val angle: Float
         get() = Math.toDegrees(atan2(direction.y.toDouble(), direction.x.toDouble())).toFloat()
@@ -81,12 +85,32 @@ class Arrow(
     }
 
     override fun render(shapeRenderer: ShapeRenderer) {
-        shapeRenderer.color = color
-        shapeRenderer.identity()
-        shapeRenderer.translate(x, y, 0f)
-        shapeRenderer.rotate(0f, 0f, 1f, angle)
-        shapeRenderer.rectLine(-size, 0f, size, 0f, 2f)          // trzon
-        shapeRenderer.triangle(size, 0f, size - 4f, 3f, size - 4f, -3f) // grot
-        shapeRenderer.identity()
+        // Ta metoda nie jest już używana
+    }
+
+    fun render(batch: SpriteBatch) {
+        val finalScale = arrowScale
+
+        val centerX = x - arrowTexture.width / 2 * finalScale
+        val centerY = y - arrowTexture.height / 2 * finalScale
+
+        batch.draw(
+            arrowTexture,
+            centerX,
+            centerY,
+            arrowTexture.width * finalScale / 2f,
+            arrowTexture.height * finalScale / 2f,
+            arrowTexture.width * finalScale,
+            arrowTexture.height * finalScale,
+            1f,
+            1f,
+            angle,
+            0,
+            0,
+            arrowTexture.width,
+            arrowTexture.height,
+            false,
+            false
+        )
     }
 }

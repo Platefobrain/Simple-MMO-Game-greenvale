@@ -437,8 +437,6 @@ class ChatSystem(
         font.data.setScale(1.0f)
 
         try {
-            // Zawsze renderuj przyciski
-            renderButtons(batch, font)
 
             if (isTyping.get()) {
                 renderTypingMode(batch, font, inputX, inputY, lineHeight)
@@ -514,37 +512,6 @@ class ChatSystem(
         val linesToShow = getLinesToShow(messages, font)
         renderLines(batch, font, linesToShow, inputX, inputY, lineHeight,
             isTypingMode = false, inputLineOffset = 0)
-    }
-
-    private fun renderButtons(batch: SpriteBatch, font: BitmapFont) {
-        val mouseX = Gdx.input.x.toFloat()
-        val mouseY = (Gdx.graphics.height - Gdx.input.y).toFloat() // zamiana y do układu GUI (0,0 na dole)
-
-        val buttonWidth = 60f
-        val buttonHeight = 25f
-        val buttonY = 310f
-
-        val chatButtonX = 20f
-        val logButtonX = 85f
-
-        fun isMouseOver(x: Float, y: Float, width: Float, height: Float, mouseX: Float, mouseY: Float): Boolean {
-            return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height
-        }
-
-        isMouseOver(chatButtonX, buttonY, buttonWidth, buttonHeight, mouseX, mouseY)
-        isMouseOver(logButtonX, buttonY, buttonWidth, buttonHeight, mouseX, mouseY)
-
-        val chatText = "[Chat]"
-        glyphLayout.setText(font, chatText)
-        val chatTextX = chatButtonX + (buttonWidth - glyphLayout.width) / 2f
-        val chatTextY = buttonY + (buttonHeight + glyphLayout.height) / 2f
-        font.draw(batch, chatText, chatTextX, chatTextY)
-
-        val logText = "[Log]"
-        glyphLayout.setText(font, logText)
-        val logTextX = logButtonX + (buttonWidth - glyphLayout.width) / 2f
-        val logTextY = buttonY + (buttonHeight + glyphLayout.height) / 2f
-        font.draw(batch, logText, logTextX, logTextY)
     }
 
     private fun getLinesToShowWithScroll(messages: List<ChatMessage>, font: BitmapFont): List<Pair<ChatMessage, String>> {

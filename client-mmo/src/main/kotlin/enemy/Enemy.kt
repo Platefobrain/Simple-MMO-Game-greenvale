@@ -1,7 +1,5 @@
 package pl.decodesoft.enemy
 
-import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import pl.decodesoft.Strings
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -10,13 +8,14 @@ class EnemyClient(
     val id: String,
     var x: Float,
     var y: Float,
-    private val type: String,
+    val type: String,
     var currentHealth: Int,
     var maxHealth: Int,
     var level: Int = 1, // Dodany poziom przeciwnika
     private var state: String = "IDLE",
     var isSelected: Boolean = false,
-    var isAlive: Boolean = true
+    var isAlive: Boolean = true,
+    var isMoving: Boolean = false
 ) {
     // Czas po śmierci (w sekundach)
     private var timeSinceDeath: Float = 0f
@@ -33,6 +32,7 @@ class EnemyClient(
             "Sheep" -> Strings.ENEMY_SHEEP  // "Owca"
             "Wolf" -> Strings.ENEMY_WOLF    // "Wilk"
             "Bear" -> Strings.ENEMY_BEAR    // "Niedźwiedź"
+            "Spider" -> Strings.ENEMY_SPIDER  // "Owca"
             else -> type
         }
 
@@ -46,8 +46,13 @@ class EnemyClient(
         }
 
     // Zmienne dla ruchu
-    private var targetX: Float = x
-    private var targetY: Float = y
+    var targetX: Float = x
+    var targetY: Float = y
+
+    private var velocityX = 0f
+    private var velocityY = 0f
+
+    fun getState(): String = state
 
     // Aktualizacja docelowej pozycji
     fun updateTargetPosition(newX: Float, newY: Float) {
@@ -59,8 +64,7 @@ class EnemyClient(
         val distanceSquared = deltaX * deltaX + deltaY * deltaY
 
         // Porównaj z kwadratem maksymalnej odległości (50f * 50f = 2500f)
-        if (distanceSquared > 2500f) { // 50^2 = 2500
-            // Musimy obliczyć pierwiastek tylko raz, gdy faktycznie jest potrzebny
+        if (distanceSquared > 2500f) {
             val distance = sqrt(distanceSquared)
 
             // Obliczamy kierunek do nowego celu
@@ -92,54 +96,44 @@ class EnemyClient(
 
     // Aktualizacja pozycji w każdej klatce bazująca na prędkości
     fun update(deltaTimeSeconds: Float) {
-        // Jeśli przeciwnik jest martwy, liczmy czas do usunięcia ciała
         if (!isAlive) {
             timeSinceDeath += deltaTimeSeconds
             if (timeSinceDeath >= corpseDecayTime) {
                 shouldBeRemoved = true
             }
+            velocityX = 0f
+            velocityY = 0f
             return
         }
 
-        // Oblicz odległość do celu
         val distToTarget = sqrt((targetX - x).pow(2) + (targetY - y).pow(2))
 
-        // Jeśli jesteśmy już bardzo blisko celu, możemy go od razu osiągnąć
-        if (distToTarget < 1f) {
+        // ZMIEŃ: Tylko gdy jesteś DOKŁADNIE w celu
+        if (distToTarget < 0.5f) {  // Zmień z 1f na 0.1f
             x = targetX
             y = targetY
+            velocityX = 0f
+            velocityY = 0f
             return
         }
 
-        // Oblicz kierunek do celu
         val dirX = (targetX - x) / distToTarget
         val dirY = (targetY - y) / distToTarget
-
-        // Oblicz dystans do pokonania w tej klatce
         val moveDistance = speed * deltaTimeSeconds
+
+        val oldX = x
+        val oldY = y
 
         if (moveDistance >= distToTarget) {
             x = targetX
             y = targetY
+            velocityX = 0f
+            velocityY = 0f
         } else {
-            // W przeciwnym razie porusz się w kierunku celu z odpowiednią prędkością
             x += dirX * moveDistance
             y += dirY * moveDistance
-        }
-    }
-
-    fun render(shapeRenderer: ShapeRenderer) {
-        if (isAlive) {
-            // Renderuj przeciwnika normalnie (tylko kształt, bez paska życia)
-            shapeRenderer.color = Color.GRAY
-            shapeRenderer.circle(x, y, 15f)
-        } else {
-            // Renderuj ciało po śmierci z efektem zanikania
-            val fadeProgress = timeSinceDeath / corpseDecayTime
-            val alpha = 1f - fadeProgress.coerceIn(0f, 1f)
-
-            shapeRenderer.color = Color(0.3f, 0.3f, 0.3f, alpha) // Ciemny kolor z przezroczystością
-            shapeRenderer.circle(x, y, 15f)
+            velocityX = x - oldX
+            velocityY = y - oldY
         }
     }
 

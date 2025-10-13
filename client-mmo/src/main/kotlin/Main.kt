@@ -17,7 +17,7 @@
 
 package pl.decodesoft
 
-import pl.decodesoft.ui.ItemManager
+import pl.decodesoft.items.ItemManager
 import com.badlogic.gdx.ApplicationAdapter
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application
@@ -38,6 +38,7 @@ import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import pl.decodesoft.Strings.IP_ADDRESS
 import pl.decodesoft.enemy.EnemyClient
+import pl.decodesoft.enemy.EnemySkinManager
 import pl.decodesoft.klasy.Archer
 import pl.decodesoft.klasy.Mage
 import pl.decodesoft.klasy.Warrior
@@ -45,8 +46,6 @@ import pl.decodesoft.klasy.skile.SkileManager
 import pl.decodesoft.map.GameMap
 import pl.decodesoft.msg.ChatSystem
 import pl.decodesoft.network.MessageManager
-import pl.decodesoft.player.Player
-import pl.decodesoft.player.PlayerController
 import pl.decodesoft.screens.CharacterCreationScreen
 import pl.decodesoft.screens.CharacterSelectionScreen
 import pl.decodesoft.screens.DeathScreen
@@ -55,63 +54,80 @@ import pl.decodesoft.settings.Menu
 import pl.decodesoft.states.*
 import pl.decodesoft.ui.GameUI
 import pl.decodesoft.ui.UISkin
-import pl.decodesoft.ui.character.ClientItem
-import pl.decodesoft.ui.inventory.InventoryItem
+import pl.decodesoft.items.ItemTooltip
+import pl.decodesoft.items.character.ClientItem
+import pl.decodesoft.items.inventory.InventoryItem
+import pl.decodesoft.items.ItemDrop
+import pl.decodesoft.klasy.projectiles.ProjectileTextures
+import pl.decodesoft.npc.NPCClient
+import pl.decodesoft.player.*
+import pl.decodesoft.player.skin.PlayerSkinManager
 import java.util.concurrent.ConcurrentHashMap
 
 // Główny kod gry
 class MMOGame : ApplicationAdapter() {
+
+    // === PODSTAWOWE KOMPONENTY RENDEROWANIA ===
     private lateinit var currentState: GameState
     lateinit var batch: SpriteBatch
     lateinit var uiBatch: SpriteBatch
     lateinit var shapeRenderer: ShapeRenderer
     lateinit var font: BitmapFont
     lateinit var camera: OrthographicCamera
+    lateinit var uiCamera: OrthographicCamera
+
+    // === MANAGERY GIER ===
     lateinit var gameMap: GameMap
     lateinit var chatSystem: ChatSystem
     lateinit var menu: Menu
     lateinit var messageManager: MessageManager
     private lateinit var skileManager: SkileManager
-    private var deathScreen: DeathScreen? = null
-
-
-    // itemmanager
     lateinit var itemManager: ItemManager
-
+    private lateinit var itemTooltip: ItemTooltip
+    lateinit var playerSkinManager: PlayerSkinManager
+    lateinit var enemySkinManager: EnemySkinManager
     var gameUI: GameUI? = null
 
-
-    // Dane gracza
+    // === DANE GRACZA ===
     var localPlayerId = "player_${System.currentTimeMillis()}"
-    var username = "Guest"
+    var username = ""
+    var characterNickname: String = ""
     lateinit var localPlayer: Player
     val layout = GlyphLayout()
 
-    // Mapa wszystkich graczy
+    // === MAPY GRACZY I OBIEKTÓW ===
     val players = ConcurrentHashMap<String, Player>()
     val pathTiles = mutableListOf<Pair<Int, Int>>()
-
-    // Komunikacja
-    lateinit var networkScope: CoroutineScope
-    private var client: HttpClient? = null
-    var session: DefaultWebSocketSession? = null
-
-    // Obsługa gracza i umiejętności
-    lateinit var playerController: PlayerController
-
-    // wrogowie enemymanager
     val enemies = ConcurrentHashMap<String, EnemyClient>()
+    val npcs = ConcurrentHashMap<String, NPCClient>()
+    val droppedItems = ConcurrentHashMap<String, ItemDrop>()
+
+    // === WALUTA ===
+    var playerGold = 0
+    var playerSilver = 0
+    var playerCopper = 0
+
+    // === SIEĆ I KOMUNIKACJA ===
+    private lateinit var networkScope: CoroutineScope
+    private var client: HttpClient? = null
+    private var session: DefaultWebSocketSession? = null
+
+    // === KONTROLERY ===
+    lateinit var playerController: PlayerController
+    lateinit var movementController: MovementController
+
+    // === WROGOWIE ===
     var enemyUpdateTimer = 0f
     val enemyUpdateInterval = 1f
 
+    // === EKRANY ===
+    private var deathScreen: DeathScreen? = null
     private var loginScreen: LoginScreen? = null
     private var characterSelectionScreen: CharacterSelectionScreen? = null
     private var characterCreationScreen: CharacterCreationScreen? = null
 
     // Metoda wywoływana z ItemMessageHandler
     fun handleItemMoved(fromType: String, fromSlot: Int, toType: String, toSlot: Int, itemId: String) {
-        println("DEBUG: MMOGame.handleItemMoved wywołane")
-
         try {
             itemManager.handleItemMoved(fromType, fromSlot, toType, toSlot, itemId)
             itemManager.debugPrintInventory()
@@ -128,21 +144,10 @@ class MMOGame : ApplicationAdapter() {
         itemManager.setInventoryItem(slot, item)
     }
 
-    // Odświeża UI ekwipunku postaci
-    fun refreshEquipmentUI() {
-        try {
-            gameUI?.refreshCharacterWindow()
-            println("DEBUG: Odświeżono UI ekwipunku")
-        } catch (e: Exception) {
-            println("DEBUG: Błąd odświeżania UI ekwipunku: ${e.message}")
-        }
-    }
-
     // Poproś serwer o aktualizację inventory
     fun requestInventoryUpdate() {
         try {
             sendWebSocketMessage("GET_PLAYER_INVENTORY|${localPlayer.id}")
-            println("DEBUG: Wysłano żądanie aktualizacji inventory")
         } catch (e: Exception) {
             println("DEBUG: Błąd wysyłania żądania inventory: ${e.message}")
         }
@@ -150,13 +155,26 @@ class MMOGame : ApplicationAdapter() {
 
     fun refreshInventoryUI() {
         try {
-            println("DEBUG: Odświeżam UI inventory")
         } catch (e: Exception) {
             println("DEBUG: Błąd odświeżania UI inventory: ${e.message}")
         }
     }
 
+    fun updatePlayerCurrency(gold: Int, silver: Int, copper: Int) {
+        playerGold = gold
+        playerSilver = silver
+        playerCopper = copper
+    }
+
+    // Metoda do resetowania pozycji przy respawnie
+    private fun resetMovementPosition(x: Float, y: Float) {
+        if (::movementController.isInitialized) {
+            movementController.resetLastPosition(x, y)
+        }
+    }
+
     override fun create() {
+        //xd
         deathScreen = DeathScreen(this)
         batch = SpriteBatch()
         uiBatch = SpriteBatch()
@@ -168,18 +186,28 @@ class MMOGame : ApplicationAdapter() {
             characters = FreeTypeFontGenerator.DEFAULT_CHARS + "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"
             color = Color.WHITE
 
-            borderWidth = 0f // BOLD czcionki
-            borderColor = Color.WHITE
+            borderWidth = 1f // BOLD czcionki
+            borderColor = Color(0.275f, 0.275f, 0.275f, 1f)
         }
         font = generator.generateFont(parameter)
         font.data.markupEnabled = true
         generator.dispose()
 
+        // Kamera świata gry
         camera = OrthographicCamera()
         camera.setToOrtho(false, Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
 
+        // Kamera UI
+        uiCamera = OrthographicCamera()
+        uiCamera.setToOrtho(false, Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
+        uiCamera.position.set(uiCamera.viewportWidth / 2, uiCamera.viewportHeight / 2, 0f)
+        uiCamera.update()
+
         // Inicjalizacja zakresu coroutine dla komunikacji sieciowej
         networkScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+        //spam
+        movementController = MovementController(networkScope) { session }
 
         // Inicjalizacja ekranu logowania
         loginScreen = LoginScreen(this)
@@ -191,14 +219,22 @@ class MMOGame : ApplicationAdapter() {
         // menu gry
         menu = Menu(this)
 
-        // ITEMMANAGER - inicjalizuj PRZED gameUI
+        // itemmanager
         itemManager = ItemManager(this)
+        itemTooltip = ItemTooltip(this)
         itemManager.initialize()
+        itemManager.loadCoinTextures()
 
-        // GAMEUI - inicjalizuj PO itemManager
+        // manager kolorów skórek graczy
+        playerSkinManager = PlayerSkinManager()
+
+        // manager skórek wrogów
+        enemySkinManager = EnemySkinManager()
+
+        // gameui
         gameUI = GameUI(this)
 
-        // POŁĄCZ ItemManager z GameUI
+        // łaczenie itemmanager game ui
         gameUI!!.connectItemManager()
 
         // Ustaw początkowy stan gry
@@ -264,7 +300,7 @@ class MMOGame : ApplicationAdapter() {
     }
 
     // Aktualizuje istniejącego przeciwnika lub tworzy nowego
-    fun updateEnemy(id: String, x: Float, y: Float, type: String, hp: Int, maxHp: Int, level: Int = 1, state: String = "IDLE"): EnemyClient {
+    fun updateEnemy(id: String, x: Float, y: Float, type: String, hp: Int, maxHp: Int, level: Int = 1, state: String = "IDLE", isMoving: Boolean = false): EnemyClient {
 
         return enemies[id]?.let { existingEnemy ->
             existingEnemy.updateTargetPosition(x, y)
@@ -272,18 +308,19 @@ class MMOGame : ApplicationAdapter() {
             existingEnemy.maxHealth = maxHp
             existingEnemy.level = level
             existingEnemy.updateState(state)
+            existingEnemy.isMoving = isMoving
             existingEnemy.isAlive = hp > 0
             existingEnemy
 
         } ?: run {
-            val newEnemy = EnemyClient(id, x, y, type, hp, maxHp, level, state)
+            val newEnemy = EnemyClient(id, x, y, type, hp, maxHp, level, state, isMoving = isMoving)
             newEnemy.isAlive = hp > 0
             enemies[id] = newEnemy
             newEnemy
         }
     }
 
-    // Teleportuje przeciwnika do nowej pozycji (dla respawnu)
+    // Teleportuje przeciwnika do nowej pozycji
     fun respawnEnemy(id: String, x: Float, y: Float, type: String, hp: Int, maxHp: Int, level: Int = 1, state: String): EnemyClient {
         return enemies[id]?.let { enemy ->
             enemy.teleportToPosition(x, y)
@@ -307,7 +344,7 @@ class MMOGame : ApplicationAdapter() {
             enemy.currentHealth -= damage
             if (enemy.currentHealth <= 0) {
                 enemy.currentHealth = 0
-                enemy.markAsDead() // Użyj nowej metody markAsDead()
+                enemy.markAsDead()
             }
             true
         } ?: false
@@ -316,7 +353,7 @@ class MMOGame : ApplicationAdapter() {
     // Oznacza przeciwnika jako martwego
     fun markEnemyAsDead(id: String): Boolean {
         return enemies[id]?.let { enemy ->
-            enemy.markAsDead() // Użyj nowej metody markAsDead()
+            enemy.markAsDead()
             enemy.isSelected = false
             true
         } ?: false
@@ -334,15 +371,42 @@ class MMOGame : ApplicationAdapter() {
         currentMana: Int,
         maxMana: Int,
         level: Int = 1,
-        experience: Int = 0
+        experience: Int = 0,
+        faction: Faction = Faction.NONE,
+        race: Race = Race.HUMAN
     ) {
         if (id != localPlayerId) {
-            val newPlayer = Player(x, y, id, username, characterClass, level = level, experience = experience)
+            val newPlayer = Player(
+                x, y, id, username, characterClass,
+                level = level,
+                experience = experience,
+                faction = faction,
+                race = race
+            )
             newPlayer.currentHealth = currentHealth
             newPlayer.maxHealth = maxHealth
             newPlayer.currentMana = currentMana
             newPlayer.maxMana = maxMana
             players[id] = newPlayer
+        }
+    }
+
+    // Dodanie nowego npc do gry
+    fun addNPC(id: String, name: String, type: String, x: Float, y: Float, currentHealth: Int = 100, maxHealth: Int = 100, level: Int = 1, faction: Faction = Faction.NONE) {
+        val npc = NPCClient(id, name, type, x, y, currentHealth, maxHealth, level, false, faction)
+        npcs[id] = npc
+        println("Dodano NPC: $name ($type), faction: ${faction.displayName}")
+    }
+
+    fun respawnNPC(id: String, name: String, type: String, x: Float, y: Float, currentHealth: Int, maxHealth: Int, level: Int, faction: Faction = Faction.NONE) {
+        val npc = NPCClient(id, name, type, x, y, currentHealth, maxHealth, level, false, faction)
+        npcs[id] = npc
+        println("Respawn NPC: $name, faction: ${faction.displayName}")
+    }
+
+    fun markNPCAsDead(npcId: String) {
+        npcs[npcId]?.let { npc ->
+            npcs[npcId] = NPCClient(npc.id, npc.name, npc.type, npc.x, npc.y, 0, npc.maxHealth, npc.level, false, npc.faction)
         }
     }
 
@@ -393,31 +457,36 @@ class MMOGame : ApplicationAdapter() {
         showCharacterSelectionScreen()
     }
 
-    // Aktualizuje pozycję gracza
-    fun updatePlayerPosition(id: String, x: Float, y: Float) {
-        players[id]?.let { player ->
-            if (id == localPlayerId) {
-                // Korekta serwera dla lokalnego gracza
-                player.setServerPosition(x, y)
-            } else {
-                // Ustawienie celu ruchu dla innych graczy
-                player.setMoveTarget(x, y)
+    fun exitGame() {
+        // Wyślij informację do serwera przed wyjściem
+        session?.let {
+            networkScope.launch {
+                try {
+                    it.send(Frame.Text("LEAVE_WORLD|${localPlayer.id}"))
+                    delay(100) // Daj czas na wysłanie
+                } catch (e: Exception) {
+                    println("Błąd przy wysyłaniu LEAVE_WORLD podczas wyjścia: ${e.message}")
+                } finally {
+                    closeConnection()
+                    Gdx.app.exit()
+                }
             }
+        } ?: run {
+            Gdx.app.exit()
         }
     }
 
+    // Aktualizuje pozycję gracza
+    fun updatePlayerPosition(id: String, x: Float, y: Float) {
+        players[id]?.setMoveTarget(x, y)
+    }
+
     //Obsługuje nieudany ruch gracza
-    fun handleMoveFailed(playerId: String, reason: String) {
+    fun handleMoveFailed(playerId: String) {
         if (playerId == localPlayerId) {
             // Anuluj ruch lokalnego gracza
             localPlayer.setMoveTarget(localPlayer.x, localPlayer.y)
-
-            // Wyświetl informację dla gracza
-            val messageText = when (reason) {
-                "no_path" -> "Nie mogę tam dojść!"
-                else -> "Ruch niemożliwy!"
-            }
-            playerController.addDamageText(localPlayer.x, localPlayer.y + 20f, messageText, Color.YELLOW)
+            messageManager.showMessage("Nie mogę tam dojść!", 2f, Color.YELLOW)
         }
     }
 
@@ -447,13 +516,13 @@ class MMOGame : ApplicationAdapter() {
         }
     }
 
-    // Bezpośrednio ustawia zdrowie przeciwnika (bez odejmowania)
+    // Bezpośrednio ustawia zdrowie przeciwnika
     fun updateEnemyHealthExplicit(enemyId: String, currentHealth: Int, maxHealth: Int) {
         enemies[enemyId]?.let { enemy ->
             enemy.currentHealth = currentHealth
             enemy.maxHealth = maxHealth
             if (currentHealth <= 0) {
-                enemy.markAsDead() // Użyj nowej metody markAsDead()
+                enemy.markAsDead()
             } else {
                 enemy.isAlive = true
             }
@@ -485,6 +554,53 @@ class MMOGame : ApplicationAdapter() {
         }
     }
 
+    // Dodaje dropnięty item do świata gry
+    fun addDroppedItem(dropId: String, itemId: String, x: Float, y: Float) {
+
+        val droppedItem = ItemDrop(
+            itemId = itemId,
+            x = x,
+            y = y,
+            itemDefinition = itemManager.getItemDefinition(itemId),
+            itemManager = itemManager
+        )
+
+        // Ustaw konkretny dropId zamiast automatycznego
+        droppedItem.id = dropId
+
+        droppedItems[dropId] = droppedItem
+    }
+
+    // Dodaj też metodę clearDroppedItems
+    fun clearDroppedItems() {
+        droppedItems.clear()
+    }
+
+    // Próbuje podnieść item z ziemi
+    private fun tryPickupItem(itemDropId: String): Boolean {
+
+        val droppedItem = droppedItems[itemDropId] ?: run {
+            return false
+        }
+
+        if (!droppedItem.isInRange(localPlayer.x, localPlayer.y)) {
+            messageManager.showMessage("Za daleko od itemu!", 2f, Color.RED)
+            return false
+        }
+
+        println("DEBUG: Sending PICKUP_ITEM message: PICKUP_ITEM|${localPlayer.id}|$itemDropId|${droppedItem.itemId}")
+        sendWebSocketMessage("PICKUP_ITEM|${localPlayer.id}|$itemDropId|${droppedItem.itemId}")
+
+        return true
+    }
+
+    // Usuwa item z ziemi (po udanym podniesieniu)
+    fun removeDroppedItem(itemDropId: String) {
+        droppedItems.remove(itemDropId)?.let { item ->
+            println("Client: Usunięto dropnięty item ${item.getDisplayName()}")
+        }
+    }
+
     // pozycja gracza po respie
     fun respawnPlayerWithPosition(playerId: String, currentHealth: Int, maxHealth: Int, x: Float, y: Float) {
         players[playerId]?.let { player ->
@@ -498,6 +614,9 @@ class MMOGame : ApplicationAdapter() {
                 localPlayer.y = y
                 camera.position.set(x, y, 0f)
                 camera.update()
+
+                //spam
+                resetMovementPosition(x, y)
 
                 //  zmiana stanu gry
                 if (currentState is DeadState && playerId == localPlayerId) {
@@ -519,14 +638,9 @@ class MMOGame : ApplicationAdapter() {
 
     // Obsługuje wiadomość o ataku
     fun handleAttackMessage(attackType: String, parts: List<String>) {
-        //println("DEBUG: handleAttackMessage called with: $attackType, parts: ${parts.joinToString()}")
-
         playerController.handleMessage(attackType, parts)
-
-        // Przekaż wiadomość do SkileManager
         if (::skileManager.isInitialized) {
             skileManager.handleSkillMessage(attackType, parts)
-            //println("DEBUG: Message passed to SkileManager")
         }
     }
 
@@ -558,6 +672,9 @@ class MMOGame : ApplicationAdapter() {
         username = userUsername
         localPlayerId = userId
 
+        // tekstury pociskow
+        ProjectileTextures.load()
+
         // Tworzenie gracza z wybraną klasą postaci i nickiem
         localPlayer = Player(
             id = localPlayerId,
@@ -581,10 +698,12 @@ class MMOGame : ApplicationAdapter() {
         // Inicjalizacja menedżera umiejętności
         skileManager = SkileManager(
             localPlayerId = localPlayerId,
-            enemies = enemies
+            enemies = enemies,
+            networkScope = networkScope,
+            getSession = { session }
         )
 
-        // Inicjalizacja GameUI - tworzymy tutaj, ale będzie używane w PlayingState
+        // Inicjalizacja GameUI
         val gameUIInstance = GameUI(this)
         gameUI = gameUIInstance
 
@@ -596,9 +715,10 @@ class MMOGame : ApplicationAdapter() {
             localPlayer = localPlayer,
             players = players,
             enemies = enemies,
+            npcs = npcs,
+            droppedItems = droppedItems,
             camera = camera,
-            networkScope = networkScope,
-            getSession = { session },
+            uiCamera = uiCamera,
             characterClass = when (localPlayer.characterClass) {
                 0 -> Archer(localPlayer, networkScope, { session }, skileManager, messageManager)
                 1 -> Mage(localPlayer, networkScope, { session }, skileManager, messageManager)
@@ -607,8 +727,21 @@ class MMOGame : ApplicationAdapter() {
             skileManager = skileManager,
             font = font,
             gameUI = gameUIInstance,
-            chatSystem = chatSystem
+            chatSystem = chatSystem,
+            movementController = movementController,
+            playerSkinManager = playerSkinManager,
+            menuToggle = { menu.toggle() },
+            isMenuVisible = { menu.isVisible() },
+            getDroppedItems = { droppedItems },
+            onPathfindRequested = { startX, startY, endX, endY ->
+                networkScope.launch {
+                    session?.send(Frame.Text("PATHFIND|$startX|$startY|$endX|$endY"))
+                }
+            }
         )
+
+        // callback podchodzenia do itemów
+        playerController.setItemPickupCallback { itemId -> tryPickupItem(itemId) }
 
         // Uruchomienie połączenia websocket
         connectToServer()
@@ -627,16 +760,21 @@ class MMOGame : ApplicationAdapter() {
                 client?.webSocket("ws://$IP_ADDRESS/ws") {
                     session = this
 
-                    // Wyślij JOIN
-                    val characterClass = localPlayer.characterClass
+                    // Podstawowe dane
                     val playerId = localPlayer.id
-                    send(Frame.Text("JOIN|0|0|$playerId|$username|$characterClass"))
+                    send(Frame.Text("JOIN|0|0|$playerId|$username"))
 
-                    // === DODAJ TO - poproś o ekwipunek ===
+                    // Załaduj eq
                     send(Frame.Text("GET_PLAYER_EQUIPMENT|$playerId"))
 
                     // Załaduj przeciwników
                     send(Frame.Text("GET_ENEMIES"))
+
+                    // Załaduj itemy na ziemi
+                    send(Frame.Text("GET_DROPPED_ITEMS"))
+
+                    // Załaduj NPC
+                    send(Frame.Text("GET_NPCS"))
 
                     // Odbieraj wiadomości
                     for (frame in incoming) {
@@ -671,6 +809,13 @@ class MMOGame : ApplicationAdapter() {
     }
 
     override fun render() {
+
+        // Aktualizacja animacji enemy skinów
+        enemySkinManager.update(Gdx.graphics.deltaTime)
+
+        // Aktualizacja animacji broni
+        playerSkinManager.update(Gdx.graphics.deltaTime)
+
         // Czyścimy ekran
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
@@ -679,6 +824,12 @@ class MMOGame : ApplicationAdapter() {
 
         // Aktualizacja logiki
         updateEnemies(Gdx.graphics.deltaTime)
+
+        // DropItems
+        droppedItems.values.forEach { item ->
+            item.update(Gdx.graphics.deltaTime)
+        }
+
         currentState.update(Gdx.graphics.deltaTime)
 
         // Renderowanie aktualnego stanu
@@ -686,19 +837,12 @@ class MMOGame : ApplicationAdapter() {
 
         // Renderujemy menu
         menu.render(Gdx.graphics.deltaTime)
-
-        //itemy
-        try {
-            gameUI?.handleDebugKeys()
-        } catch (e: Exception) {
-            // GameUI lub ItemManager jeszcze nie gotowe - ignoruj
-        }
     }
 
     // podazanie za graczem
     fun updateCamera() {
         // Interpolacja liniowa dla płynnego śledzenia
-        val lerpFactor = 0.5f // Wartość od 0 do 1, im bliżej 1, tym szybsze śledzenie
+        val lerpFactor = 0.5f
         val targetX = localPlayer.x
         val targetY = localPlayer.y
 
@@ -714,7 +858,6 @@ class MMOGame : ApplicationAdapter() {
         val currentDeadState = currentState as? DeadState
 
         if (currentDeadState != null) {
-            // Jeśli jesteśmy w stanie śmierci, użyj jego metody do odradzania
             currentDeadState.handleRespawn()
         } else {
             Gdx.app.error("Respawn", "Cannot respawn - not in death state")
@@ -722,32 +865,74 @@ class MMOGame : ApplicationAdapter() {
     }
 
     override fun resize(width: Int, height: Int) {
-        // Przekierowanie do aktualnego stanu
+        // Aktualizuj kamerę świata
+        camera.viewportWidth = width.toFloat()
+        camera.viewportHeight = height.toFloat()
+        camera.update()
+
+        // Aktualizuj kamerę UI
+        uiCamera.viewportWidth = width.toFloat()
+        uiCamera.viewportHeight = height.toFloat()
+        uiCamera.position.set(uiCamera.viewportWidth / 2, uiCamera.viewportHeight / 2, 0f)
+        uiCamera.update()
+
         currentState.resize(width, height)
         menu.resize(width, height)
     }
 
     override fun dispose() {
-        batch.dispose()
-        uiBatch.dispose()
-        shapeRenderer.dispose()
-        font.dispose()
+        println("Aplikacja się zamyka...")
+
+        // Wyślij informację do serwera o opuszczeniu świata
+        if (::localPlayer.isInitialized) {
+            session?.let {
+                try {
+                    runBlocking {
+                        it.send(Frame.Text("LEAVE_WORLD|${localPlayer.id}"))
+                        delay(50)
+                    }
+                    println("Wysłano LEAVE_WORLD dla gracza ${localPlayer.id}")
+                } catch (e: Exception) {
+                    println("Błąd przy wysyłaniu LEAVE_WORLD w dispose: ${e.message}")
+                }
+            }
+        }
+
+        // Standardowe sprzątanie zasobów - sprawdź inicjalizację każdego
+        if (::batch.isInitialized) batch.dispose()
+        if (::uiBatch.isInitialized) uiBatch.dispose()
+        if (::shapeRenderer.isInitialized) shapeRenderer.dispose()
+        if (::font.isInitialized) font.dispose()
+
         loginScreen?.dispose()
         characterSelectionScreen?.dispose()
         characterCreationScreen?.dispose()
         deathScreen?.dispose()
-        gameMap.dispose()
-        menu.dispose()
-        UISkin.dispose()
+
+        if (::gameMap.isInitialized) gameMap.dispose()
+        if (::itemManager.isInitialized) itemManager.dispose()
+        if (::menu.isInitialized) menu.dispose()
+        if (::enemySkinManager.isInitialized) enemySkinManager.dispose()
+        if (::playerSkinManager.isInitialized) playerSkinManager.dispose()
+
+        // Sprawdź czy statyczne obiekty są zainicjalizowane
+        runCatching { UISkin.dispose() }
+        runCatching { ProjectileTextures.dispose() }
 
         // Zamknięcie połączenia websocket
         runBlocking {
-            session?.close(CloseReason(CloseReason.Codes.NORMAL, "App dispose"))
-            client?.close()
+            try {
+                session?.close(CloseReason(CloseReason.Codes.NORMAL, "App dispose"))
+                client?.close()
+            } catch (e: Exception) {
+                println("Błąd przy zamykaniu połączenia: ${e.message}")
+            }
         }
 
         // Anulowanie wszystkich koroutyn
-        networkScope.cancel()
+        if (::networkScope.isInitialized) {
+            networkScope.cancel()
+        }
     }
 
     // Punkt wejścia dla aplikacji desktopowej
@@ -756,7 +941,7 @@ class MMOGame : ApplicationAdapter() {
         fun main(args: Array<String>) {
             val config = Lwjgl3ApplicationConfiguration()
             config.setTitle("MMO Game")
-            //config.setWindowedMode(900, 700)
+            //config.setWindowedMode(1000, 800)
             config.setFullscreenMode(Lwjgl3ApplicationConfiguration.getDisplayMode())
             config.setForegroundFPS(60)
             Lwjgl3Application(MMOGame(), config)

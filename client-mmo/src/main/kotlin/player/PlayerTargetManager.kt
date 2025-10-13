@@ -22,7 +22,9 @@ import com.badlogic.gdx.graphics.OrthographicCamera
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.math.Vector3
 import pl.decodesoft.enemy.EnemyClient
-import pl.decodesoft.klasy.CharacterClass
+import pl.decodesoft.items.ItemDrop
+import pl.decodesoft.npc.NPCClient
+import kotlin.math.abs
 
 // Klasa zarządzająca celami gracza
 class PlayerTargetManager(
@@ -30,14 +32,23 @@ class PlayerTargetManager(
     private val localPlayer: Player,
     private val players: Map<String, Player>,
     private val enemies: Map<String, EnemyClient>,
-    private val characterClass: CharacterClass,
+    private val npcs: Map<String, NPCClient>,
+    private val droppedItems: Map<String, ItemDrop>,
     private val onTargetChanged: (Any?, String?) -> Unit
 ) {
+    // Targetowanie
+    companion object {
+        private const val ENTITY_HITBOX_HALF_WIDTH = 20f    // (szerokość 30px)
+        private const val ENTITY_HITBOX_HEIGHT = 70f        // wysokosc
+        private const val ITEM_HITBOX_HALF_SIZE = 15f       // itemy
+    }
+
     // Właściwości z prywatnym setterem
     private var selectedEntityId: String? = null
     private var selectedEntityType: String? = null
     private var lastPlayerTarget: Player? = null
     private var lastEnemyTarget: EnemyClient? = null
+    private var lastNPCTarget: NPCClient? = null
 
     fun findEntityUnderCursor(): Pair<Any, String>? {
         val mouseX = Gdx.input.x
@@ -46,8 +57,8 @@ class PlayerTargetManager(
         // Konwersja współrzędnych ekranu na współrzędne świata gry
         val worldCoords = camera.unproject(Vector3(mouseX.toFloat(), mouseY.toFloat(), 0f))
 
-        // Ograniczenie zasięgu przeszukiwania (max dystans od gracza)
-        val maxSearchRadius = 500f
+        // Ograniczenie zasięgu przeszukiwania
+        val maxSearchRadius = 600f
         val searchRadiusSquared = maxSearchRadius * maxSearchRadius
 
         // Najpierw sprawdź, czy kursor jest nad którymś z graczy
@@ -56,10 +67,12 @@ class PlayerTargetManager(
                     Vector2.dst2(localPlayer.x, localPlayer.y, player.x, player.y) <= searchRadiusSquared
         }
 
-        // Szukaj tylko wśród przefiltrowanych graczy
+        // GRACZE - PROSTOKĄTNY HITBOX (od dołu do góry)
         nearbyPlayers.find { player ->
-            val distance = Vector2.dst(worldCoords.x, worldCoords.y, player.x, player.y)
-            distance <= 15f
+            val dx = abs(worldCoords.x - player.x)
+            val dyFromFeet = worldCoords.y - (player.y - 15f)
+
+            dx <= ENTITY_HITBOX_HALF_WIDTH && dyFromFeet >= 0f && dyFromFeet <= ENTITY_HITBOX_HEIGHT
         }?.let {
             return Pair(it, "player")
         }
@@ -69,11 +82,44 @@ class PlayerTargetManager(
             distSquared <= searchRadiusSquared
         }
 
+        // PRZECIWNICY - PROSTOKĄTNY HITBOX (od dołu do góry)
         nearbyEnemies.find { enemy ->
-            val distance = Vector2.dst(worldCoords.x, worldCoords.y, enemy.x, enemy.y)
-            distance <= 15f
+            val dx = abs(worldCoords.x - enemy.x)
+            val dyFromFeet = worldCoords.y - (enemy.y - 1f)
+
+            dx <= ENTITY_HITBOX_HALF_WIDTH && dyFromFeet >= 0f && dyFromFeet <= ENTITY_HITBOX_HEIGHT
         }?.let {
             return Pair(it, "enemy")
+        }
+
+        val nearbyNPCs = npcs.values.filter { npc ->
+            val distSquared = Vector2.dst2(localPlayer.x, localPlayer.y, npc.x, npc.y)
+            distSquared <= searchRadiusSquared
+        }
+
+        // NPC - PROSTOKĄTNY HITBOX (od dołu do góry)
+        nearbyNPCs.find { npc ->
+            val dx = abs(worldCoords.x - npc.x)
+            val dyFromFeet = worldCoords.y - (npc.y - 15f)
+
+            dx <= ENTITY_HITBOX_HALF_WIDTH && dyFromFeet >= 0f && dyFromFeet <= ENTITY_HITBOX_HEIGHT
+        }?.let {
+            return Pair(it, "npc")
+        }
+
+        // Sprawdź itemy
+        val nearbyItems = droppedItems.values.filter { item ->
+            val distSquared = Vector2.dst2(localPlayer.x, localPlayer.y, item.x, item.y)
+            distSquared <= searchRadiusSquared
+        }
+
+        // ITEMY - KWADRATOWY HITBOX (wyśrodkowany)
+        nearbyItems.find { item ->
+            val dx = abs(worldCoords.x - item.x)
+            val dy = abs(worldCoords.y - item.y)
+            dx <= ITEM_HITBOX_HALF_SIZE && dy <= ITEM_HITBOX_HALF_SIZE
+        }?.let {
+            return Pair(it, "item")
         }
 
         return null
@@ -93,6 +139,7 @@ class PlayerTargetManager(
                     selectedEntityType = "player"
                     lastPlayerTarget = player
                     lastEnemyTarget = null
+                    lastNPCTarget = null
                 }
                 "enemy" -> {
                     val enemy = entity as EnemyClient
@@ -101,6 +148,22 @@ class PlayerTargetManager(
                     selectedEntityType = "enemy"
                     lastPlayerTarget = null
                     lastEnemyTarget = enemy
+                    lastNPCTarget = null
+                }
+                "npc" -> {
+                    val npc = entity as NPCClient
+                    npc.isSelected = true
+                    selectedEntityId = npc.id
+                    selectedEntityType = "npc"
+                    lastPlayerTarget = null
+                    lastEnemyTarget = null
+                    lastNPCTarget = npc
+                }
+                "item" -> {
+                    val item = entity as ItemDrop
+                    item.isSelected = true
+                    selectedEntityId = item.id
+                    selectedEntityType = "item"
                 }
             }
         } else {
@@ -118,24 +181,13 @@ class PlayerTargetManager(
         onTargetChanged(null, null)
     }
 
-    fun requestAttackOnTarget(): Boolean {
-        return when (selectedEntityType) {
-            "player" -> lastPlayerTarget?.let {
-                characterClass.handleTargetClick(it)
-            } ?: false
-            "enemy" -> lastEnemyTarget?.let {
-                characterClass.handleEnemyClick(it)
-            } ?: false
-            else -> false
-        }
-    }
-
     private fun clearSelectionMarkers() {
         selectedEntityId?.let { prevId ->
-            if (selectedEntityType == "player") {
-                players[prevId]?.isSelected = false
-            } else if (selectedEntityType == "enemy") {
-                enemies[prevId]?.isSelected = false
+            when (selectedEntityType) {
+                "player" -> players[prevId]?.isSelected = false
+                "enemy" -> enemies[prevId]?.isSelected = false
+                "npc" -> npcs[prevId]?.isSelected = false
+                "item" -> droppedItems[prevId]?.isSelected = false
             }
         }
     }

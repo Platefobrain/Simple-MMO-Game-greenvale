@@ -1,0 +1,15 @@
+id=cloth_helm
+name=Magiczny Kaptur
+type=HELMET
+rarity=UNCOMMON
+requiredLevel=1
+strengthBonus=0
+agilityBonus=0
+spellPowerBonus=1
+staminaBonus=1
+manaBonus=2
+armorBonus=1
+attackSpeedBonus=0
+critRatingBonus=40
+icon=cloth_helm.png
+requiredClass=1

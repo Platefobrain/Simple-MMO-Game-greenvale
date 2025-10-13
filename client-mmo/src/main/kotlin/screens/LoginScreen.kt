@@ -151,11 +151,11 @@ class LoginScreen(private val game: MMOGame) : Screen {
         passwordField = TextField("", skin)
         passwordField.isPasswordMode = true
 
-        rememberMeCheckBox = CheckBox("", skin) // checkbox bez tekstu
+        rememberMeCheckBox = CheckBox("", skin)
         val rememberLabel = Label("Zapamiętaj login", skin)
 
         val rememberGroup = HorizontalGroup()
-        rememberGroup.space(10f) // odstęp między checkboxem a labelką
+        rememberGroup.space(10f)
         rememberGroup.addActor(rememberMeCheckBox)
         rememberGroup.addActor(rememberLabel)
 
@@ -168,8 +168,8 @@ class LoginScreen(private val game: MMOGame) : Screen {
         val enterListener = object : InputListener() {
             override fun keyDown(event: InputEvent?, keycode: Int): Boolean {
                 if (keycode == Input.Keys.ENTER || keycode == Input.Keys.NUMPAD_ENTER) {
-                    loginButton.toggle()  // jeśli jest toggle, albo inaczej:
-                    loginButton.fire(ChangeListener.ChangeEvent()) // wywołaj zdarzenie zmiany (kliknięcie)
+                    loginButton.toggle()
+                    loginButton.fire(ChangeListener.ChangeEvent())
                     return true
                 }
                 return false
@@ -250,7 +250,7 @@ class LoginScreen(private val game: MMOGame) : Screen {
         optionsButton.addListener(object : ChangeListener() {
             override fun changed(event: ChangeEvent?, actor: Actor?) {
                 println("Opcje kliknięte")
-                // Tu możesz dodać ekran opcji
+                // dodaj opcje
             }
         })
 
@@ -285,15 +285,12 @@ class LoginScreen(private val game: MMOGame) : Screen {
                     // Przejście do ekranu wyboru postaci po krótkim opóźnieniu
                     delay(1000)
 
-                    // KLUCZOWA ZMIANA TUTAJ - bezpośrednio ustawiamy dane w MMOGame
                     Gdx.app.postRunnable {
-                        // Ustaw dane użytkownika w głównej klasie gry PRZED przejściem do następnego ekranu
                         game.username = username
                         game.localPlayerId = authResponse.userId
 
                         println("Ustawiono dane użytkownika w MMOGame: ${game.username}, ID: ${game.localPlayerId}")
 
-                        // Teraz dopiero tworzymy ekran wyboru postaci
                         game.showCharacterSelectionScreen()
                     }
                 } else {
@@ -346,7 +343,7 @@ class LoginScreen(private val game: MMOGame) : Screen {
     }
 
     override fun render(delta: Float) {
-        Gdx.gl.glClearColor(0.1f, 0.1f, 0.2f, 1f)
+        Gdx.gl.glClearColor(0.275f, 0.275f, 0.275f, 1.0f)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
         camera.update()
@@ -374,7 +371,6 @@ class LoginScreen(private val game: MMOGame) : Screen {
                 val alpha = (time + i * 0.33f) % 1f
                 val size = 10f * (1f - abs(alpha * 2 - 1))
                 shapeRenderer.color = Color(1f, 1f, 1f, 1f)
-                // Center the dots horizontally (centerX) while keeping vertical position (50f)
                 shapeRenderer.circle(centerX + (i - 1) * 30f, 50f, size)
             }
             shapeRenderer.end()

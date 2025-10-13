@@ -1,0 +1,15 @@
+id=leather_helm
+name=Skórzany Hełm
+type=HELMET
+rarity=UNCOMMON
+requiredLevel=1
+strengthBonus=0
+agilityBonus=1
+spellPowerBonus=0
+staminaBonus=2
+manaBonus=1
+armorBonus=2
+attackSpeedBonus=0
+critRatingBonus=22
+icon=leather_helm.png
+requiredClass=0

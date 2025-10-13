@@ -23,7 +23,6 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch
 
 // Klasa zarządzająca efektami walki, jak teksty obrażeń
 class CombatEffectsManager {
-    // Klasa do przechowywania efektów tekstowych obrażeń
     private class DamageText(
         var x: Float,
         var y: Float,
@@ -43,14 +42,12 @@ class CombatEffectsManager {
 
     // Aktualizacja efektów tekstowych obrażeń
     fun update(delta: Float) {
-        // Aktualizacja pozycji i przezroczystości
         damageTexts.forEach { text ->
-            text.y += 30f * delta // Unoszenie w górę
-            text.alpha -= delta // Zanikanie
+            text.y += 30f * delta
+            text.alpha -= delta
             text.lifetime += delta
         }
 
-        // Usuwanie starych efektów
         damageTexts.removeAll { it.lifetime > 1.5f }
     }
 
@@ -58,20 +55,18 @@ class CombatEffectsManager {
     fun render(batch: SpriteBatch, font: BitmapFont) {
         if (damageTexts.isEmpty()) return
 
-        // Zapisz oryginalny kolor i rozmiar czcionki
         val originalColor = font.color.cpy()
         val originalScaleX = font.data.scaleX
         val originalScaleY = font.data.scaleY
 
-        // ZWIĘKSZ ROZMIAR CZCIONKI
-        font.data.setScale(1.3f) // 2x większy tekst (możesz zmienić na 1.5f, 2.5f itp.)
+        font.data.setScale(1.3f)
 
         damageTexts.forEach { text ->
             font.color = Color(text.color.r, text.color.g, text.color.b, text.alpha)
             font.draw(batch, text.text, text.x - 10f, text.y)
         }
 
-        // Przywróć oryginalny rozmiar i kolor czcionki po zakończeniu renderowania
+        // Przywróć
         font.data.setScale(originalScaleX, originalScaleY)
         font.color = originalColor
     }

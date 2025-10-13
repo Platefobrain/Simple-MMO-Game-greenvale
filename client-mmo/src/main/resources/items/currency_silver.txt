@@ -1,0 +1,15 @@
+id=currency_silver
+name=Silver Coin
+type=CURRENCY
+rarity=COMMON
+requiredLevel=1
+strengthBonus=0
+agilityBonus=0
+spellPowerBonus=0
+staminaBonus=0
+manaBonus=0
+armorBonus=0
+attackSpeedBonus=0
+critRatingBonus=0
+icon=currency/silver.png
+requiredClass=

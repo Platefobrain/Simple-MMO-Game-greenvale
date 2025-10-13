@@ -1,0 +1,15 @@
+id=wooden_staff
+name=Drewniana Laska
+type=WEAPON
+rarity=UNCOMMON
+requiredLevel=1
+strengthBonus=0
+agilityBonus=0
+spellPowerBonus=2
+staminaBonus=1
+manaBonus=2
+armorBonus=0
+attackSpeedBonus=21
+critRatingBonus=22
+icon=staff.png
+requiredClass=1

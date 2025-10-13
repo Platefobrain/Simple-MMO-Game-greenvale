@@ -23,17 +23,28 @@ class LoadingState(game: MMOGame) : BaseGameState(game) {
             loadingScreen.setProgress(progress)
 
             if (progress >= 1.1f) {
-                val csv = Gdx.files.internal("assets/maps/map.csv").readString("UTF-8")
                 game.gameMap = GameMap(120, 120, 16)
-                game.gameMap.loadFromCsv(csv)
+
+                // Załaduj wszystkie chunki
+                loadChunk("greenshire")
+                loadChunk("forest")
+                loadChunk("desert")
+                loadChunk("mountains")
+                loadChunk("swamp")
 
                 loaded = true
-
-                // ukryj menu
                 game.menu.hide()
-
                 game.changeState(PlayingState(game))
             }
+        }
+    }
+
+    private fun loadChunk(chunkName: String) {
+        try {
+            val csv = Gdx.files.internal("assets/maps/$chunkName.csv").readString("UTF-8")
+            game.gameMap.loadFromCsv(csv, chunkName)
+        } catch (e: Exception) {
+            println("Nie można załadować chunka $chunkName: ${e.message}")
         }
     }
 

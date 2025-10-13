@@ -31,7 +31,6 @@ interface GameState {
 
 // Klasa bazowa dla stanów gry
 abstract class BaseGameState(protected val game: MMOGame) : GameState {
-    // Domyślne implementacje
     override fun enter() {}
     override fun exit() {}
     override fun resize(width: Int, height: Int) {}

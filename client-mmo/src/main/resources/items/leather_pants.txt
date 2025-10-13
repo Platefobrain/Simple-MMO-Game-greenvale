@@ -1,0 +1,15 @@
+id=leather_pants
+name=Skórzane Spodnie
+type=PANTS
+rarity=UNCOMMON
+requiredLevel=1
+strengthBonus=0
+agilityBonus=1
+spellPowerBonus=0
+staminaBonus=2
+manaBonus=1
+armorBonus=3
+attackSpeedBonus=0
+critRatingBonus=22
+icon=leather_pants.png
+requiredClass=0

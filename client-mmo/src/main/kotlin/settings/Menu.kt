@@ -128,7 +128,7 @@ class Menu(private val game: MMOGame) {
         val dialog = object : Dialog("Exit Game", UISkin.skin) {
             override fun result(result: Any?) {
                 if (result as Boolean) {
-                    Gdx.app.exit()
+                    game.exitGame()
                 }
             }
         }

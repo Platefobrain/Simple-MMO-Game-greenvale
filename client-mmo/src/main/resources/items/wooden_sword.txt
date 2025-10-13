@@ -1,0 +1,15 @@
+id=wooden_sword
+name=Drewniany Miecz
+type=WEAPON
+rarity=EPIC
+requiredLevel=1
+strengthBonus=2
+agilityBonus=0
+spellPowerBonus=0
+staminaBonus=1
+manaBonus=2
+armorBonus=0
+attackSpeedBonus=18
+critRatingBonus=22
+icon=sword.png
+requiredClass=2

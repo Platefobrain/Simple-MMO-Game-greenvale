@@ -21,7 +21,6 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.Vector2
 import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
-import pl.decodesoft.klasy.projectiles.Fireball
 import pl.decodesoft.klasy.skile.SkileManager
 import pl.decodesoft.network.MessageManager
 import pl.decodesoft.player.Player
@@ -33,16 +32,16 @@ class Mage(
     session: () -> DefaultWebSocketSession?,
     skileManager: SkileManager,
     messageManager: MessageManager
-) : CharacterClass(player, networkScope, session, skileManager, messageManager) { // POPRAWKA: messageManager zamiast MessageManager
+) : CharacterClass(player, networkScope, session, skileManager, messageManager) {
 
     // Nadpisane właściwości z klasy bazowej
-    override val attackCooldown = 4.0f
+    override val attackCooldown = 2.0f
     override var attackTimer = 0f
     override val attackRange = 250f
     override val attackName = "Kula ognia"
     override val attackColor: Color = Color.FIREBRICK
 
-    // Rzucenie kuli ognia w określonym kierunku
+    // Rzucenie kuli ognia - TYLKO wysyła request do serwera
     override fun performAttack(targetX: Float, targetY: Float, targetId: String) {
         // Oblicz kierunek kuli ognia
         val dirX = targetX - player.x
@@ -53,20 +52,9 @@ class Mage(
         val normalizedDirX = dirX / distance
         val normalizedDirY = dirY / distance
 
-        // Utwórz nową kulę ognia
-        val fireball = Fireball(
-            player.x,
-            player.y,
-            normalizedDirX,
-            normalizedDirY,
-            player.id,
-            targetId,
-            targetX,
-            targetY
-        )
-
-        // Dodaj kulę ognia do menedżera umiejętności
-        skileManager.addSkill(fireball)
+        // USUNIĘTO: Tworzenie kuli ognia lokalnie
+        // Kula ognia zostanie utworzona TYLKO gdy serwer zatwierdzi atak
+        // i wyśle broadcast SPELL_ATTACK
 
         // Wyślij informację o kuli ognia do serwera
         sendAttackMessage(
