@@ -1,0 +1,127 @@
+ podzielić na cztery części: górna linia pokazuje wersję programu i nazwę
+ edytowanego w tym momencie pliku oraz wskazuje czy plik ten został
+ zmieniony. Dalej, główne okno edytora zawiera edytowany tekst. Trzecia
+ linia od dołu, czyli linia stanu, służy do wyświetlania ważnych
+ komunikatów.  Dwie najniższe linie przypominają najczęściej używane
+ kombinacje klawiszy.
+
+ Kombinacje klawiszy opisujemy w następujący sposób: sekwencje sterujące
+ wprowadzane klawiszem Control (Ctrl) lub podwójnym naciśnięciem klawisza
+ Escape są oznaczone daszkiem (^). Sekwencje Escape, wprowadzane zależnie
+ od układu klawiatury jednym z klawiszy Esc, Alt lub Meta, są oznaczone
+ Meta (M-).  Aby wprowadzić dowolny znak, należy dwukrotnie nacisnąć Esc i
+ wprowadzić dziesiętny kod tego znaku (w zakresie 000 - 255).
+
+ W głównym oknie edytora dostępne są wymienione poniżej kombinacje
+ klawiszy. Klawisze alternatywne ujęto w nawiasy:
+
+^G     (F1)      Wyświetl ten tekst pomocy
+^X     (F2)      Zamknij bieżący bufor / Wyjdź z nano
+^O     (F3)      Zapisz bieżący plik (zaznaczony tekst) na dysk
+^R     (Ins)     Wstaw inny plik do bieżącego (lub nowego) bufora
+
+^W     (F6)      Szukaj łańcucha lub wyrażenia regularnego
+^\     (M-R)     Zamień łańcuch lub wyrażenie regularne
+^K     (F9)      Wytnij bieżącą linię (lub oznaczony tekst) i zapisz do schowka
+^U     (F10)     Wstaw zawartość schowka w pozycji kursora
+
+^T               Wykonaj funkcje lub polecenie zewnętrzne
+^J     (F4)      Wyjustuj bieżący akapit
+
+^C     (F11)     Pokaż informację o pozycji kursora
+^/     (M-G)     Przejdź do linii i kolumny
+
+M-U              Odwołaj ostatnią operację
+M-E              Odtwórz ostatnią operację
+
+M-A    (^6)      Zaznacz tekst od bieżącego położenia kursora
+M-6    (M-^)     Skopiuj bieżącą linię (lub zaznaczony tekst) i zapisz do
+		   schowka
+
+M-]              Przejdź do parzystego nawiasu
+
+^Q               Szukaj łańcucha lub wyrażenia regularnego wstecz
+M-Q              Szukaj wstecz
+M-W              Szukaj naprzód
+
+^B     (◂)       Przejdź o znak wstecz
+^F     (▸)       Przejdź o znak do przodu
+^◂     (M-Space) Przejdź o słowo wstecz
+^▸     (^Space)  Przejdź o słowo do przodu
+^A     (Home)    Przejdź na początek bieżącej linii
+^E     (End)     Przejdź na koniec bieżącej linii
+
+^P     (▴)       Przejdź do poprzedniej linii
+^N     (▾)       Przejdź do następnej linii
+M-▴    (M--)     Przewiń o jedną linię w górę bez przesunięcia kursora w tekście
+M-▾    (M-+)     Przewiń o jedną linię w dół bez przesunięcia kursora w tekście
+
+^▴     (M-7)     Przejdź do poprzedniego bloku tekstu
+^▾     (M-8)     Przejdź do następnego bloku tekstu
+M-(    (M-9)     Przejdź na początek akapitu; potem na początek poprzedniego
+		   akapitu
+M-)    (M-0)     Przejdź poza koniec akapitu; potem poza koniec następnego
+		   akapitu
+
+^Y     (PgUp)    Przejdź do poprzedniego ekranu
+^V     (PgDn)    Przejdź do następnego ekranu
+M-\    (^Home)   Przejdź do pierwszej linii pliku
+M-/    (^End)    Przejdź do ostatniej linii pliku
+
+M-◂    (M-,)     Przejdź do poprzedniego bufora
+M-▸    (M-.)     Przejdź do następnego bufora
+
+^I     (Tab)     Wstaw znak tabulacji na pozycji kursora (lub wcinaj zaznaczone
+		   linie)
+^M     (Enter)   Wstaw znak nowej linii na pozycji kursora
+
+^H     (Bsp)     Usuń znak na lewo od kursora
+^D     (Del)     Usuń znak na pozycji kursora
+
+M-Bsp  (Sh-^Del) Wytnij wstecz od kursora do początku słowa
+^Del             Wytnij od kursora do początku następnego słowa
+M-T              Wytnij wszystko z pozycji kursora po koniec pliku
+
+M-J              Wyjustuj cały plik
+M-D              Policz ilość linii, słów i znaków
+M-V              Wstaw następne naciśnięcie klawisza dosłownie
+
+M-}              Wcięcie bieżącej linii lub oznaczonych linii
+M-{    (Sh-Tab)  Odwróć wcięcie bieżącej linii lub oznaczonych linii
+
+M-3              Zakomentuj/odkomentuj bieżącą linię (lub oznaczone linii)
+^]               Uzupełnij bieżące słowo
+
+M-:              Rozpocznij/zakończ nagrywanie makra
+M-;              Uruchom ostatnio nagrane makro
+
+M-Del            Wyrzuć bieżącą linię (lub zaznaczony tekst)
+
+M-Ins            Umieść lub usuń zaczepienie w bieżącej linii
+M-PgUp           Przejdź wstecz do najbliższego zaczepienia
+M-PgDn           Przejdź do przodu do najbliższego zaczepienia
+
+F12              Wywołaj sprawdzanie pisowni, jeśli dostępne
+M-B              Wywołaj sprawdzanie składni, jeśli dostępne
+M-F              Uruchom program aby sformatować/porządkować/manipulować buforem
+
+		 Zawieś edytor (powrót do powłoki)
+^L               Odśwież (ponownie wyświetl) bieżący ekran
+^L               Wyśrodkuj linię, w której znajduje się kursor
+
+^S               Zapisz plik bez podpowiedzi
+
+M-Z		 Ukryty interfejs (włącz/wyłącz)
+M-X		 Tryb pomocy (włącz/wyłącz)
+M-C		 Stała pozycja wyświetlania kursora (włącz/wyłącz)
+M-S		 Miękkie zawijanie długich linii (włącz/wyłącz)
+M-N		 Numeracja linii (włącz/wyłącz)
+M-P		 Wyświetlanie białych znaków (włącz/wyłącz)
+M-Y		 Kolorowanie składni (włącz/wyłącz)
+
+M-H		 Rozumny klawisz "w początek" (włącz/wyłącz)
+M-I		 Automatyczne wcięcia (włącz/wyłącz)
+M-K		 Wytnij do końca (włącz/wyłącz)
+M-L		 Twarde zawijanie długich linii (włącz/wyłącz)
+M-O		 Przetworzenie tabulacji na spacji (włącz/wyłącz)
+M-M		 Obsługa myszy (włącz/wyłącz)
