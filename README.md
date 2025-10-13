@@ -132,4 +132,5 @@ Wieloosobowa gra RPG napisana w Kotlinie z wykorzystaniem LibGDX i Ktor WebSocke
 
 ### Uruchomienie Serwera
 ```bash
-
+cd server-mmo
+./gradlew run
