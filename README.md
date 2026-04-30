@@ -35,7 +35,7 @@ Wieloosobowa gra RPG napisana w Kotlinie z wykorzystaniem LibGDX i Ktor WebSocke
 - **Różne zasięgi ataku** dla każdej klasy
   - Łucznik: 295px (dystans)
   - Mag: 245px (średni zasięg)
-  - Wojownik: 40px (ближний бій)
+  - Wojownik: 40px (walaka wrecz)
 - **System cooldownów** z wizualizacją
 - **Animowane ataki** (łuk, czary, miecz)
 - **Damage numbers** z efektami
